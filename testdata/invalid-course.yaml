@@ -5,6 +5,7 @@ course:
   title: Cursus regelkleppen & terugslagkleppen
   description: Cursus regelkleppen & terugslagkleppen.
   project_id: 11213334-002
+  timezone: Europe/whatever
   start: "09:00"
   end: "08:00"
 
@@ -30,12 +31,12 @@ days:
     end: "17:00"
     schedule:
       - title: ""
-        type: Presentation
+        type: Preseation
         duration: 0m
-        trainers: [mt]
+        trainers: [my]
       - title: Kleppen afvoerkarakteristiek
         type: Presentation
-        duration: 1h
+        duration: 1h1m
         trainers: [mt]
       - break: coffee
       - title: Kleppen Regel- en koppelkarakteristiek

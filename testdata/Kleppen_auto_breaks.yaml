@@ -4,6 +4,7 @@ course:
   title: Cursus regelkleppen & terugslagkleppen
   description: Cursus regelkleppen & terugslagkleppen.
   project_id: 11213334-002
+  timezone: Europe/Amsterdam
   start: "09:00"
   end: "17:00"
 

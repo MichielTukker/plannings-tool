@@ -87,7 +87,6 @@ class Course(InputModel):
     start: ClockTime
     end: ClockTime
     description: Nonblank | None = None
-    location: Nonblank | None = None
     project_id: Nonblank | None = None
 
     @model_validator(mode="after")
@@ -221,6 +220,7 @@ ScheduleEntry = Annotated[
 class Day(InputModel):
     label: Nonblank
     date: CalendarDate | None = None
+    location: Nonblank | None = None
     start: ClockTime | None = None
     end: ClockTime | None = None
     break_mode: BreakMode | None = None

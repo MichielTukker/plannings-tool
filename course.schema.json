@@ -36,11 +36,6 @@
           "title": "End",
           "type": "string"
         },
-        "location": {
-          "pattern": "\\S",
-          "title": "Location",
-          "type": "string"
-        },
         "project_id": {
           "pattern": "\\S",
           "title": "Project Id",
@@ -89,6 +84,11 @@
         "label": {
           "pattern": "\\S",
           "title": "Label",
+          "type": "string"
+        },
+        "location": {
+          "pattern": "\\S",
+          "title": "Location",
           "type": "string"
         },
         "schedule": {

@@ -103,5 +103,7 @@ def test_schema_represents_input_contract():
     assert definitions["Break"]["required"] == ["break"]
     assert definitions["Day"]["properties"]["date"]["type"] == "string"
     assert "anyOf" not in definitions["Day"]["properties"]["date"]
+    assert definitions["Day"]["properties"]["location"]["type"] == "string"
+    assert "location" not in definitions["Course"]["properties"]
     assert definitions["Course"]["properties"]["description"]["type"] == "string"
     assert definitions["Trainer"]["properties"]["email"]["format"] == "email"

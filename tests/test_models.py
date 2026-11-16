@@ -44,7 +44,7 @@ def test_strict_version(definition, version):
     [
         (("course", "title"), " \n"),
         (("course", "description"), ""),
-        (("course", "location"), None),
+        (("days", 0, "location"), None),
         (("course", "project_id"), " "),
         (("trainers", 0, "name"), "\t"),
         (("trainers", 0, "email"), "not-an-email"),
@@ -85,6 +85,20 @@ def test_unknown_fields(definition, path):
         target = target[key]
     target["unexpected"] = True
     assert_error(definition, "extra_forbidden")
+
+
+def test_location_is_per_day(definition):
+    definition["days"][0]["location"] = "Training room A"
+    second_day = deepcopy(definition["days"][0])
+    second_day.update(label="Day 2", location="Training room B")
+    definition["days"].append(second_day)
+    course = validate(definition)
+    assert [day.location for day in course.days] == [
+        "Training room A",
+        "Training room B",
+    ]
+    definition["course"]["location"] = "Course-wide room"
+    assert_error(definition, "extra_forbidden", ("course", "location"))
 
 
 @pytest.mark.parametrize("field", ["name", "email"])

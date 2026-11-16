@@ -24,11 +24,11 @@ unknown fields and report errors with the affected day and session.
 
 ### Input structure
 
-- **Course:** title, description, location, project ID, default start/end times,
+- **Course:** title, description, project ID, default start/end times,
   optional IANA timezone.
 - **Trainers:** stable IDs, display names, and optional explicit colors.
-- **Days:** label, optional date, optional start/end overrides, break mode, and
-  ordered sessions.
+- **Days:** label, optional date and location, optional start/end overrides,
+  break mode, and ordered sessions.
 - **Sessions:** title, built-in type, duration, and one or more trainer IDs.
 
 Day labels are sufficient; calendar dates are optional. Days inherit course
@@ -88,7 +88,7 @@ and original session identity when a session is split into multiple fragments.
 Use the IANA timezone identifier from `course.timezone`, defaulting to
 `Europe/Amsterdam`. Add the `tzdata` runtime dependency so IANA data is
 available consistently on Windows as well as platforms with a system timezone
-database. Do not infer the zone from the free-form course location or from the
+database. Do not infer the zone from the free-form day location or from the
 machine's local timezone.
 
 For dated days:

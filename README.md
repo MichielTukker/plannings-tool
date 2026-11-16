@@ -57,8 +57,8 @@ The original single-day input format is not supported.
 ### Fields and defaults
 
 - `schema_version` must be integer `1`.
-- `course` requires `title`, `start`, and `end`. Optional `description`,
-  `location`, and `project_id` must be nonblank strings when supplied.
+- `course` requires `title`, `start`, and `end`. Optional `description` and
+  `project_id` must be nonblank strings when supplied.
 - `trainers` is a nonempty list. Each trainer requires `id`, `name` (full display
   name), and `email`; `color` is an optional quoted `"#RRGGBB"` value. IDs match
   `[a-z][a-z0-9_-]*` and must be unique. Email syntax is checked offline, without
@@ -66,8 +66,9 @@ The original single-day input format is not supported.
 - `defaults` is optional and may contain `coffee_break` (default `15m`), `lunch`
   (default `45m`), and `break_mode` (default `manual`).
 - `days` is a nonempty ordered list. Each day requires a nonblank unique `label`
-  and nonempty `schedule`. Optional `start` and `end` independently override
-  course times. Optional `break_mode` overrides the shared default.
+  and nonempty `schedule`. Optional `location` must be a nonblank string when
+  supplied. Optional `start` and `end` independently override course times.
+  Optional `break_mode` overrides the shared default.
 - Day `date` is optional: use a quoted real ISO date such as `"2027-03-01"`.
   Supplied dates must be unique and strictly increasing, ignoring undated days.
 - Unknown fields and explicit `null` values are rejected. Omit optional fields

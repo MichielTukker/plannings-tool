@@ -15,9 +15,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_example():
-    result = load_course(ROOT / "testdata" / "course.yaml")
+    result = load_course(ROOT / "testdata" / "Kleppen-cursus-2026.yaml")
     assert len(result.days) == 2
-    assert result.days[1].label
+    assert result.days[1].effective_start(result.course).minutes == 540
+    assert [day.location for day in result.days] == [
+        "Paviljoen 2&3",
+        "Paviljoen 2&3",
+    ]
 
 
 @pytest.mark.parametrize(

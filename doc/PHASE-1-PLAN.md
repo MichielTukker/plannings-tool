@@ -41,7 +41,6 @@ Unknown fields are errors at every level.
 | `start` | Yes | Quoted `HH:MM` |
 | `end` | Yes | Quoted `HH:MM`; later than `start` |
 | `description` | No | Nonblank string when supplied |
-| `location` | No | Nonblank string when supplied |
 | `project_id` | No | Nonblank string when supplied |
 
 Optional fields may be absent, but explicit `null` is invalid. Do not silently
@@ -77,6 +76,7 @@ fixed in code; phase 1 exposes no YAML settings for them.
 Each day has:
 
 - Required nonblank `label`, unique across the course, compared case-sensitively.
+- Optional nonblank `location`, specific to that day.
 - Optional quoted `date` in ISO `YYYY-MM-DD` form, validated as a real date.
 - Optional quoted `start` and `end`, independently inheriting course times.
 - Optional `break_mode`, inheriting `defaults.break_mode`.
@@ -158,7 +158,6 @@ schema_version: 1
 course:
   title: Hydraulics course
   description: Practical introduction to hydraulic systems.
-  location: Training room
   project_id: DEMO-001
   start: "09:00"
   end: "17:00"
@@ -180,6 +179,7 @@ defaults:
 days:
   - label: Day 1
     date: "2027-03-01"
+    location: Training room A
     schedule:
       - title: Introduction
         type: Presentation
@@ -198,6 +198,7 @@ days:
         trainers: [sam]
   - label: Day 2
     date: "2027-03-02"
+    location: Training room B
     start: "09:30"
     end: "16:00"
     break_mode: automatic
@@ -317,7 +318,7 @@ Cover the following acceptance cases:
 
 | Area | Cases |
 |---|---|
-| Valid input | Two-day example; omitted defaults; inherited and overridden times; optional metadata absent |
+| Valid input | Two-day example; omitted defaults; inherited and overridden times; optional metadata absent; different per-day locations |
 | Scalar syntax | Accepted duration forms; representative invalid forms; invalid dates/times; strict version typing |
 | YAML | Malformed input; nested duplicate keys; multiple documents; empty/non-mapping root; unsafe tags |
 | Fields | Unknown keys; null values; whitespace-only required/supplied optional strings |

@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal, LiteralString, Self
 
 from email_validator import EmailNotValidError, validate_email
 from pydantic import (
@@ -44,10 +44,14 @@ SESSION_RULES: dict[SessionType, SessionRule] = {
 
 
 def issue(
-    code: str, message: str, location: tuple[str | int, ...], value: object
+    code: LiteralString,
+    message: LiteralString,
+    location: tuple[str | int, ...],
+    value: object,
+    context: dict[str, object] | None = None,
 ) -> InitErrorDetails:
     return InitErrorDetails(
-        type=PydanticCustomError(code, message), loc=location, input=value
+        type=PydanticCustomError(code, message, context), loc=location, input=value
     )
 
 
@@ -115,7 +119,11 @@ class Trainer(InputModel):
         try:
             validate_email(value, check_deliverability=False)
         except EmailNotValidError as exc:
-            raise PydanticCustomError("email_syntax", str(exc)) from exc
+            raise PydanticCustomError(
+                "email_syntax",
+                "Invalid email address: {reason}",
+                {"reason": str(exc)},
+            ) from exc
         return value
 
     @field_validator("id", "color")
@@ -148,38 +156,51 @@ class Session(InputModel):
         return value
 
 
-class FixedSession(Session):
-    type: SessionType
+def validate_minimum_duration(session_type: SessionType, duration: Duration) -> None:
+    minimum = SESSION_RULES[session_type].minimum_minutes
+    if duration.minutes < minimum:
+        raise ValidationError.from_exception_data(
+            session_type,
+            [
+                issue(
+                    "duration_minimum",
+                    "{session_type} requires at least {minimum} minutes",
+                    ("duration",),
+                    duration,
+                    {"session_type": session_type, "minimum": minimum},
+                )
+            ],
+        )
+
+
+class Presentation(Session):
+    type: Literal["Presentation"]
     duration: Duration
 
     @model_validator(mode="after")
     def minimum_duration(self) -> Self:
-        minimum = SESSION_RULES[self.type].minimum_minutes
-        if self.duration.minutes < minimum:
-            raise ValidationError.from_exception_data(
-                type(self).__name__,
-                [
-                    issue(
-                        "duration_minimum",
-                        f"{self.type} requires at least {minimum} minutes",
-                        ("duration",),
-                        self.duration,
-                    )
-                ],
-            )
+        validate_minimum_duration("Presentation", self.duration)
         return self
 
 
-class Presentation(FixedSession):
-    type: Literal["Presentation"]
-
-
-class Exercise(FixedSession):
+class Exercise(Session):
     type: Literal["Exercise"]
+    duration: Duration
+
+    @model_validator(mode="after")
+    def minimum_duration(self) -> Self:
+        validate_minimum_duration("Exercise", self.duration)
+        return self
 
 
-class Excursion(FixedSession):
+class Excursion(Session):
     type: Literal["Excursion"]
+    duration: Duration
+
+    @model_validator(mode="after")
+    def minimum_duration(self) -> Self:
+        validate_minimum_duration("Excursion", self.duration)
+        return self
 
 
 class Interactive(Session):
@@ -335,9 +356,10 @@ class CourseDefinition(InputModel):
                         errors.append(
                             issue(
                                 "unknown_trainer",
-                                f"Unknown trainer ID: {trainer_id}",
+                                "Unknown trainer ID: {trainer_id}",
                                 (*entry_path, "trainers", trainer_index),
                                 trainer_id,
+                                {"trainer_id": trainer_id},
                             )
                         )
         if errors:

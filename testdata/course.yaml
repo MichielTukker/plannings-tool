@@ -25,6 +25,8 @@ defaults:
 days:
   - label: dag 1
     date: "2026-11-12"
+    start: "09:00"
+    end: "17:00"
     schedule:
       - title: Opening
         type: Presentation
@@ -67,7 +69,7 @@ days:
         duration: remaining
         trainers: [mt]
   - label: Day 2
-    date: "2027-03-02"
+    date: "2026-11-13"
     start: "09:00"
     end: "16:00"
     # break_mode: automatic

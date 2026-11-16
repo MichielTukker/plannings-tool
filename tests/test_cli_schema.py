@@ -1,4 +1,5 @@
 import json
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,18 @@ def test_validate_warning_preserves_success(tmp_path, definition):
     assert "missing_manual_breaks" in result.stderr
 
 
+def test_invalid_example_reports_multiple_errors():
+    path = ROOT / "testdata" / "invalid-course.yaml"
+    result = runner.invoke(app, ["validate", str(path)])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    for code in (
+        "time_order",
+        "email_syntax",
+        "string_pattern_mismatch",
+        "calendar_date",
+    ):
+        assert code in result.stderr
 
 
 @pytest.mark.parametrize("contents", [None, "course: [", "days: []"])

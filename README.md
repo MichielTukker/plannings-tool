@@ -10,7 +10,7 @@ Requires Python 3.14+ and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
 uv sync
-uv run plan validate testdata\course.yaml
+uv run plan validate testdata\Kleppen-cursus-2026.yaml
 uv run plan schema --output course.schema.json
 uv run plan --help
 ```
@@ -33,7 +33,8 @@ times. Warnings do not reject the course or change the successful exit code.
 
 ## Course YAML
 
-See [testdata/course.yaml](testdata/course.yaml) for a complete two-day example.
+See [testdata/Kleppen-cursus-2026.yaml](testdata/Kleppen-cursus-2026.yaml) for a
+complete two-day example.
 A minimal course is:
 
 ```yaml
@@ -155,7 +156,7 @@ from plannings_tool import (
     parse_course,
 )
 
-course = load_course("testdata\\course.yaml")
+course = load_course("testdata\\Kleppen-cursus-2026.yaml")
 day = course.days[0]
 start_minutes = day.effective_start(course.course).minutes
 schema = generate_schema()

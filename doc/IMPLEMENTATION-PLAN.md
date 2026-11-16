@@ -17,6 +17,8 @@ command.
 
 See [PHASE-1-PLAN.md](PHASE-1-PLAN.md) for the agreed YAML contract,
 implementation sequence, and acceptance criteria.
+See [PHASE-2-PLAN.md](PHASE-2-PLAN.md) for the detailed manual-scheduling and
+timezone implementation plan.
 
 Use Pydantic models as the source of truth and generate a JSON Schema for YAML
 editor validation and completion. Load YAML with PyYAML, then validate it. Reject

@@ -150,8 +150,9 @@ validation do not develop separate grammars.
 
 ## Representative input
 
-Update `testdata\course.yaml` to demonstrate the complete contract, including an
-editor schema directive pointing to the generated schema. Use fictional trainers.
+Keep a representative course YAML under `testdata` that demonstrates the
+complete contract, including an editor schema directive pointing to the
+generated schema. Use fictional trainers in committed example fixtures.
 
 ```yaml
 schema_version: 1
@@ -223,8 +224,9 @@ This example demonstrates validation, not a phase-1 scheduling guarantee.
 
 ### Step 1: Dependencies and package structure
 
-Add runtime dependencies on Pydantic v2, PyYAML, and email-validator. Add pytest
-and Ruff as development dependencies using uv. Preserve the existing build backend.
+Add runtime dependencies on Pydantic v2, PyYAML, email-validator, Typer, and
+Rich. Add pytest and Ruff as development dependencies using uv. Preserve the
+existing build backend.
 
 Use a small package structure:
 
@@ -234,10 +236,11 @@ Use a small package structure:
 | `values.py` | Shared duration/time/date syntax and conversion helpers |
 | `loader.py` | Safe YAML loading, duplicate keys, file loading, diagnostics |
 | `schema.py` | Deterministic JSON Schema generation/export |
-| `cli.py` | Argument parsing and user-facing output |
+| `cli.py` | Typer commands and Rich user-facing output |
 | `__init__.py` | Small public API exports and existing command entry-point compatibility |
 
-Use standard-library argparse; do not add a CLI framework.
+Use Typer for command arguments and Rich for help, success, warning, and error
+output. Rich should automatically disable ANSI colors when output is redirected.
 
 ### Step 2: Value types and input models
 
@@ -288,12 +291,14 @@ Document these limits: passing editor validation is not a substitute for
 ### Step 5: CLI
 
 ```text
-plan validate testdata\course.yaml
+plan validate testdata\Kleppen-cursus-2026.yaml
 plan schema --output course.schema.json
 ```
 
-`validate` prints a short confirmation on stdout only on success. On failure,
-print concise errors on stderr without a traceback for expected failures.
+`validate` prints a short green confirmation on stdout only on success. On
+failure, print concise red errors on stderr without a traceback for expected
+failures. Print yellow advisory warnings to stderr; warnings do not change the
+successful exit status.
 
 `schema` requires an output path and writes UTF-8 JSON. Report write failures
 explicitly and avoid leaving partial output.
@@ -302,7 +307,8 @@ Exit codes:
 
 - `0`: successful validation or schema export.
 - `1`: input validation, YAML, file-read, or file-write failure.
-- `2`: invalid command-line arguments, following argparse conventions.
+- `2`: invalid command-line arguments, following Typer's standard usage-error
+  behavior.
 
 Keep `--help` useful at the root and subcommand levels. Do not expose render or
 scheduling commands before they are implemented. The future PDF interface is

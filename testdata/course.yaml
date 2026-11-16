@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=../course.schema.json
+schema_version: 1
+course:
+  title: Cursus regelkleppen & terugslagkleppen
+  description: Cursus regelkleppen & terugslagkleppen.
+  location: Paviljoen 2&3
+  project_id: 11213334-002
+  start: "09:00"
+  end: "17:00"
+
+trainers:
+  - id: mt
+    name: Michiel Tukker
+    email: michiel.tukker@deltares.nl
+    color: "#336699"
+  - id: fv
+    name: Femke Verhaart
+    email: femke.verhaart@deltares.nl
+
+defaults:
+  coffee_break: 15m
+  lunch: 45m
+  break_mode: manual
+
+days:
+  - label: dag 1
+    date: "2026-11-12"
+    schedule:
+      - title: Opening
+        type: Presentation
+        duration: 30m
+        trainers: [mt]
+      - title: Kleppen afvoerkarakteristiek
+        type: Presentation
+        duration: 1h
+        trainers: [mt]
+      - break: coffee
+      - title: Kleppen Regel- en koppelkarakteristiek
+        type: Presentation
+        duration: 30m
+        trainers: [mt]
+      - title: Kleppen Cavitatie & geluid
+        type: Presentation
+        duration: 1h 15m
+        trainers: [mt]
+      - break: lunch
+        duration: 30m
+      - title: Bezoek Hydrohal
+        type: Excursion
+        duration: 1h
+        trainers: [mt]
+      - title: Kleppen in systeem A
+        type: Presentation
+        duration: 30m
+        trainers: [mt]
+      - break: coffee
+      - title: Kleppen in systeem B
+        type: Presentation
+        duration: 45m
+        trainers: [mt]
+      - title: Kleppen Dynamisch gedrag
+        type: Presentation
+        duration: 30m
+        trainers: [mt]
+      - title: Discussion
+        type: Interactive
+        duration: remaining
+        trainers: [mt]
+  - label: Day 2
+    date: "2027-03-02"
+    start: "09:00"
+    end: "16:00"
+    # break_mode: automatic
+    schedule:
+      - title: Opening terugslagkleppen
+        type: Presentation
+        duration: 30m
+        trainers: [fv]
+      - title: terugslagkleppen stationair
+        type: Presentation
+        duration: 1h
+        trainers: [mt]
+      - break: coffee
+      - title: terugslagkleppen dynamisch
+        type: Presentation
+        duration: 2h
+        trainers: [fv]
+      - break: lunch
+        duration: 45m
+      - title: WANDA voorbeeld
+        type: Exercise
+        duration: 1h 30m
+        trainers: [fv, mt]
+      - break: coffee
+      - title: Drukbegrenzers
+        type: Presentation
+        duration: 45m
+        trainers: [mt]
+      - title: Discussion
+        type: Interactive
+        duration: remaining
+        trainers: [fv, mt]

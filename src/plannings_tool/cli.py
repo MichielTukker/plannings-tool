@@ -1,8 +1,11 @@
-"""Command-line validation and schema export."""
+"""Typer commands and Rich terminal output."""
 
-import argparse
-import sys
 from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.text import Text
 
 from .loader import (
     CourseValidationError,
@@ -11,34 +14,92 @@ from .loader import (
 )
 from .schema import write_schema
 
+app = typer.Typer(
+    name="plan",
+    help="Validate course definitions and export their editor schema.",
+    no_args_is_help=True,
+    add_completion=False,
+    rich_markup_mode="rich",
+)
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="plan", description="Validate course definitions and export their schema."
-    )
-    commands = parser.add_subparsers(dest="command", required=True)
-    validate = commands.add_parser("validate", help="Validate a course YAML file")
-    validate.add_argument("course", type=Path, help="UTF-8 course YAML file")
-    schema = commands.add_parser("schema", help="Export the editor JSON Schema")
-    schema.add_argument(
-        "--output", type=Path, required=True, help="Destination JSON file"
-    )
-    args = parser.parse_args(argv)
-    if args.command == "validate":
-        try:
-            course = load_course(args.course)
-        except CourseValidationError as exc:
-            for issue in exc.issues:
-                print(f"{args.course}: {issue}", file=sys.stderr)
-            return 1
-        for warning in collect_validation_warnings(course):
-            print(f"{args.course}: warning: {warning}", file=sys.stderr)
-        print(f"Valid course: {args.course}")
-    else:
-        try:
-            write_schema(args.output)
-        except OSError as exc:
-            print(f"Cannot write schema to {args.output}: {exc}", file=sys.stderr)
-            return 1
-        print(f"Schema written to {args.output}")
-    return 0
+
+def _print_issue(
+    console: Console,
+    label: str,
+    label_style: str,
+    path: Path,
+    message: str,
+    message_style: str,
+) -> None:
+    output = Text()
+    output.append(label, style=label_style)
+    output.append(" ")
+    output.append(str(path), style="cyan")
+    output.append(": ")
+    output.append(message, style=message_style)
+    console.print(output)
+
+
+@app.command(help="Validate a course YAML file.")
+def validate(
+    course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
+) -> None:
+    """Validate a course definition and report advisory warnings."""
+    error_console = Console(stderr=True)
+    try:
+        definition = load_course(course)
+    except CourseValidationError as exc:
+        for issue in exc.issues:
+            _print_issue(
+                error_console,
+                "Error",
+                "bold red",
+                course,
+                str(issue),
+                "red",
+            )
+        raise typer.Exit(code=1) from exc
+
+    for warning in collect_validation_warnings(definition):
+        _print_issue(
+            error_console,
+            "Warning",
+            "bold yellow",
+            course,
+            str(warning),
+            "yellow",
+        )
+
+    success = Text()
+    success.append("Valid course", style="bold green")
+    success.append(f": {course}", style="cyan")
+    Console().print(success)
+
+
+@app.command(help="Export the editor JSON Schema.")
+def schema(
+    output: Annotated[
+        Path,
+        typer.Option("--output", help="Destination JSON file", show_default=False),
+    ],
+) -> None:
+    """Write the generated JSON Schema atomically."""
+    error_console = Console(stderr=True)
+    try:
+        write_schema(output)
+    except OSError as exc:
+        error = Text()
+        error.append("Error", style="bold red")
+        error.append(f" Cannot write schema to {output}: {exc}", style="red")
+        error_console.print(error)
+        raise typer.Exit(code=1) from exc
+
+    message = Text()
+    message.append("Schema written", style="bold green")
+    message.append(f": {output}", style="cyan")
+    Console().print(message)
+
+
+def main() -> None:
+    """Run the plan command-line application."""
+    app()

@@ -15,8 +15,11 @@ uv run plan schema --output course.schema.json
 uv run plan --help
 ```
 
-Validation prints a short confirmation on success. Invalid files produce
-field-path diagnostics on stderr, for example
+The CLI uses Typer for commands and Rich for terminal formatting. Success
+messages are green, warnings yellow, and errors red when the terminal supports
+color; redirected output remains readable without color. Validation prints a
+short confirmation on success. Invalid files produce field-path diagnostics
+on stderr, for example
 `days[0].schedule[0].Presentation.duration`. Indexes are zero-based. YAML syntax
 and duplicate-key errors also include line/column information.
 

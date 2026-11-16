@@ -1,8 +1,8 @@
 # plannings-tool
 
-A Python course-planning tool. **Phase 1 provides YAML validation and JSON Schema
-export only.** Timetable calculation, automatic break insertion, PDFs, and other
-outputs are not implemented yet.
+A Python course-planning tool. Phases 1 and 2 provide YAML validation, JSON
+Schema export, and a sequential schedule preview with manually placed breaks.
+Automatic break insertion and PDF generation are not implemented yet.
 
 ## Install and run
 
@@ -11,6 +11,7 @@ Requires Python 3.14+ and [uv](https://docs.astral.sh/uv/).
 ```powershell
 uv sync
 uv run plan validate testdata\Kleppen-cursus-2026.yaml
+uv run plan schedule testdata\Kleppen-cursus-2026.yaml
 uv run plan schema --output course.schema.json
 uv run plan --help
 ```
@@ -26,6 +27,12 @@ and duplicate-key errors also include line/column information.
 Exit codes are `0` for success, `1` for input/file errors, and `2` for invalid
 command-line arguments. Expected failures do not print tracebacks. Schema
 exports replace their destination atomically.
+
+`plan schedule` previews sequential timings with Rich tables. Scheduling
+warnings are printed on stderr and do not change the successful exit status;
+`--strict` treats warnings as failures and suppresses the preview. Automatic
+break scheduling is not implemented yet, so scheduling an automatic-mode day
+reports an error.
 
 Manual-mode days longer than four hours with no breaks produce a
 `missing_manual_breaks` warning on stderr, using inherited or overridden day
@@ -63,6 +70,10 @@ The original single-day input format is not supported.
 - `schema_version` must be integer `1`.
 - `course` requires `title`, `start`, and `end`. Optional `description` and
   `project_id` must be nonblank strings when supplied.
+  Optional `timezone` is an IANA timezone name and defaults to
+  `Europe/Amsterdam`; it applies to all dated days in the course.
+- YAML date and time values remain quoted strings, but the Python model parses
+  dates and clock times to `datetime.date` and `datetime.time`.
 - `trainers` is a nonempty list. Each trainer requires `id`, `name` (full display
   name), and `email`; `color` is an optional quoted `"#RRGGBB"` value. IDs match
   `[a-z][a-z0-9_-]*` and must be unique. Email syntax is checked offline, without
@@ -119,8 +130,13 @@ breaks, breaks at the start/end, and all-break days are valid.
 
 `automatic` break mode is accepted as input but rejects all manual break
 entries. Preferred break times/windows will be fixed in code in phase 3.
-**Validation does not run scheduling:** it neither places automatic breaks nor
-rejects overflow or unused time.
+The phase-2 scheduler does not place automatic breaks. It also reports overflow
+and unused time as warnings instead of changing fixed durations.
+
+Dated days resolve local wall-clock times in the course timezone. Nonexistent
+and ambiguous daylight-saving times, and days crossing an offset transition,
+are rejected. Undated days remain floating local-clock schedules without
+timezone-aware instants. Activity and break lengths are elapsed minutes.
 
 YAML must contain exactly one mapping document. Duplicate keys, including
 collisions introduced by merge mappings, and unsafe object tags are rejected.
@@ -154,12 +170,15 @@ from plannings_tool import (
     generate_schema,
     load_course,
     parse_course,
+    schedule_course,
 )
 
 course = load_course("testdata\\Kleppen-cursus-2026.yaml")
 day = course.days[0]
-start_minutes = day.effective_start(course.course).minutes
+start = day.effective_start(course.course)
+start_minutes = start.hour * 60 + start.minute
 schema = generate_schema()
+schedule = schedule_course(course)
 ```
 
 `parse_course(text)` validates YAML without file I/O. Both loading functions
@@ -176,8 +195,14 @@ uv sync --dev
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
+uv run ty check
 ```
+
+`schedule_course` returns a `ScheduleResult` with ordered day/entry data and
+structured warnings; it raises `SchedulingError` for unsupported automatic
+breaks and timezone resolution failures.
 
 Tests check that the committed schema matches model generation. See
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) and
-[PHASE-1-PLAN.md](PHASE-1-PLAN.md) for scope and acceptance criteria.
+[PHASE-1-PLAN.md](PHASE-1-PLAN.md) and
+[PHASE-2-PLAN.md](PHASE-2-PLAN.md) for scope and acceptance criteria.

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import time
 
 import pytest
 from pydantic import ValidationError
@@ -25,11 +26,30 @@ def test_defaults_and_independent_inheritance(definition):
     day = result.days[0]
     assert result.defaults.coffee_break.minutes == 15
     assert result.defaults.lunch.minutes == 45
-    assert day.effective_start(result.course).minutes == 540
-    assert day.effective_end(result.course).minutes == 960
+    assert day.effective_start(result.course) == time(9, 0)
+    assert day.effective_end(result.course) == time(16, 0)
     assert day.effective_break_mode(result.defaults) == "manual"
     assert "start" not in day.model_fields_set
     assert "end" in day.model_fields_set
+    assert result.course.timezone == "Europe/Amsterdam"
+
+
+@pytest.mark.parametrize(
+    ("timezone_name", "valid"),
+    [
+        ("Europe/Amsterdam", True),
+        ("America/Los_Angeles", True),
+        ("Invalid/Zone", False),
+    ],
+)
+def test_course_timezone(definition, timezone_name, valid):
+    definition["course"]["timezone"] = timezone_name
+    if valid:
+        assert (
+            CourseDefinition.model_validate(definition).course.timezone == timezone_name
+        )
+    else:
+        assert_error(definition, "timezone_name", ("course", "timezone"))
 
 
 @pytest.mark.parametrize("version", [True, False, "1", 1.0, 2, None])

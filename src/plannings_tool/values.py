@@ -1,10 +1,10 @@
 """Strict scalar values shared by validation and scheduling."""
 
 import re
-from datetime import date
-from typing import ClassVar
+from datetime import date, time
+from typing import Annotated, ClassVar
 
-from pydantic import GetCoreSchemaHandler
+from pydantic import BeforeValidator, GetCoreSchemaHandler, WithJsonSchema
 from pydantic_core import CoreSchema, PydanticCustomError, core_schema
 
 DURATION_PATTERN = r"^(?:[1-9][0-9]*m|[1-9][0-9]*h(?: [1-5]?[1-9]m| [1-5]0m)?)$"
@@ -43,25 +43,35 @@ class Duration(StringValue):
         return total
 
 
-class ClockTime(StringValue):
-    pattern = TIME_PATTERN
-
-    @property
-    def minutes(self) -> int:
-        hours, minutes = self.split(":")
-        return int(hours) * 60 + int(minutes)
+def parse_clock_time(value: object) -> time:
+    if not isinstance(value, str) or re.fullmatch(TIME_PATTERN, value) is None:
+        raise PydanticCustomError("value_syntax", "Invalid time; expected HH:MM")
+    hours, minutes = value.split(":")
+    return time(hour=int(hours), minute=int(minutes))
 
 
-class CalendarDate(StringValue):
-    pattern = DATE_PATTERN
+def parse_calendar_date(value: object) -> date:
+    if not isinstance(value, str) or re.fullmatch(DATE_PATTERN, value) is None:
+        raise PydanticCustomError("value_syntax", "Invalid date; expected YYYY-MM-DD")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise PydanticCustomError(
+            "calendar_date", "Date must be a real calendar date"
+        ) from exc
 
-    @classmethod
-    def _validate(cls, value: str):
-        result = super()._validate(value)
-        try:
-            date.fromisoformat(value)
-        except ValueError as exc:
-            raise PydanticCustomError(
-                "calendar_date", "Date must be a real calendar date"
-            ) from exc
-        return result
+
+ClockTime = Annotated[
+    time,
+    BeforeValidator(parse_clock_time),
+    WithJsonSchema({"type": "string", "pattern": TIME_PATTERN}, mode="validation"),
+]
+CalendarDate = Annotated[
+    date,
+    BeforeValidator(parse_calendar_date),
+    WithJsonSchema({"type": "string", "pattern": DATE_PATTERN}, mode="validation"),
+]
+
+
+def minutes_since_midnight(value: time) -> int:
+    return value.hour * 60 + value.minute

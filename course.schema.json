@@ -46,6 +46,12 @@
           "title": "Start",
           "type": "string"
         },
+        "timezone": {
+          "default": "Europe/Amsterdam",
+          "pattern": "\\S",
+          "title": "Timezone",
+          "type": "string"
+        },
         "title": {
           "pattern": "\\S",
           "title": "Title",

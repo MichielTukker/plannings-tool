@@ -1,3 +1,5 @@
+from datetime import date, time
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
@@ -55,7 +57,9 @@ def test_invalid_duration(value):
     ("value", "minutes"), [("00:00", 0), ("09:30", 570), ("23:59", 1439)]
 )
 def test_clock_time(value, minutes):
-    assert TypeAdapter(ClockTime).validate_python(value).minutes == minutes
+    parsed = TypeAdapter(ClockTime).validate_python(value)
+    assert isinstance(parsed, time)
+    assert parsed.hour * 60 + parsed.minute == minutes
 
 
 @pytest.mark.parametrize(
@@ -75,4 +79,6 @@ def test_invalid_date(value):
 
 
 def test_leap_date():
-    assert TypeAdapter(CalendarDate).validate_python("2028-02-29") == "2028-02-29"
+    parsed = TypeAdapter(CalendarDate).validate_python("2028-02-29")
+    assert isinstance(parsed, date)
+    assert parsed == date(2028, 2, 29)

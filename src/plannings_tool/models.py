@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from typing import Annotated, Literal, LiteralString, Self
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from email_validator import EmailNotValidError, validate_email
 from pydantic import (
@@ -19,7 +20,7 @@ from pydantic import (
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, InitErrorDetails, PydanticCustomError
 
-from .values import CalendarDate, ClockTime, Duration
+from .values import CalendarDate, ClockTime, Duration, minutes_since_midnight
 
 Nonblank = Annotated[str, Field(pattern=r"\S")]
 TrainerId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]*$")]
@@ -92,10 +93,24 @@ class Course(InputModel):
     end: ClockTime
     description: Nonblank | None = None
     project_id: Nonblank | None = None
+    timezone: Nonblank = "Europe/Amsterdam"
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise PydanticCustomError(
+                "timezone_name",
+                "Unknown IANA timezone: {timezone}",
+                {"timezone": value},
+            ) from exc
+        return value
 
     @model_validator(mode="after")
     def ordered_times(self) -> Self:
-        if self.start.minutes >= self.end.minutes:
+        if minutes_since_midnight(self.start) >= minutes_since_midnight(self.end):
             raise ValidationError.from_exception_data(
                 type(self).__name__,
                 [
@@ -314,9 +329,8 @@ class CourseDefinition(InputModel):
                         )
                     )
                 previous_date = day.date
-            if (
-                day.effective_start(self.course).minutes
-                >= day.effective_end(self.course).minutes
+            if minutes_since_midnight(day.effective_start(self.course)) >= (
+                minutes_since_midnight(day.effective_end(self.course))
             ):
                 errors.append(
                     issue(

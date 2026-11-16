@@ -9,6 +9,7 @@ from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
 from .models import Break, CourseDefinition
+from .values import minutes_since_midnight
 
 
 @dataclass(frozen=True)
@@ -39,10 +40,9 @@ def collect_validation_warnings(course: CourseDefinition) -> list[ValidationIssu
     """Return advisory issues without rejecting an otherwise valid course."""
     warnings: list[ValidationIssue] = []
     for index, day in enumerate(course.days):
-        duration = (
-            day.effective_end(course.course).minutes
-            - day.effective_start(course.course).minutes
-        )
+        duration = minutes_since_midnight(
+            day.effective_end(course.course)
+        ) - minutes_since_midnight(day.effective_start(course.course))
         if (
             day.effective_break_mode(course.defaults) == "manual"
             and duration > 4 * 60

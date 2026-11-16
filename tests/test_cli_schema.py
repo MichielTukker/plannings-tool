@@ -71,7 +71,8 @@ def test_usage_errors(args):
 
 
 @pytest.mark.parametrize(
-    "args", [["--help"], ["validate", "--help"], ["schema", "--help"]]
+    "args",
+    [["--help"], ["validate", "--help"], ["schedule", "--help"], ["schema", "--help"]],
 )
 def test_help(args):
     result = runner.invoke(app, args)
@@ -149,4 +150,8 @@ def test_schema_represents_input_contract():
     assert definitions["Day"]["properties"]["location"]["type"] == "string"
     assert "location" not in definitions["Course"]["properties"]
     assert definitions["Course"]["properties"]["description"]["type"] == "string"
+    assert definitions["Course"]["properties"]["timezone"]["type"] == "string"
+    assert (
+        definitions["Course"]["properties"]["timezone"]["default"] == "Europe/Amsterdam"
+    )
     assert definitions["Trainer"]["properties"]["email"]["format"] == "email"

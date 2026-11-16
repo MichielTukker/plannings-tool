@@ -228,8 +228,8 @@ the Python API.
 
 ## Acceptance tests
 
-Use pytest and the existing Ruff checks. Keep fixtures deterministic and avoid
-network access.
+Use pytest, Ruff, and `ty check`. Keep fixtures deterministic and avoid network
+access.
 
 | Area | Acceptance cases |
 |---|---|
@@ -242,9 +242,9 @@ network access.
 | CLI | Preview content/order; warnings on stderr; normal warning exit is zero; strict warning exits nonzero and emits no preview; expected failures have no traceback |
 | Regression | Existing phase-1 YAML validation, schema determinism/export, and course/day input rules continue to pass |
 
-Run the complete pytest suite, `ruff check .`, `ruff format --check .`, regenerate
-the committed schema, validate the examples, and exercise both normal and strict
-CLI preview commands.
+Run the complete pytest suite, `ruff check .`, `ruff format --check .`, and
+`ty check`; regenerate the committed schema; validate the examples; and exercise
+both normal and strict CLI preview commands.
 
 ## Definition of done
 

@@ -229,8 +229,8 @@ Write PDFs atomically so a failed run does not leave a partial output.
 
 ## Validation strategy
 
-Use pytest for focused validation and scheduling cases, and Ruff for linting and
-formatting.
+Use pytest for focused validation and scheduling cases, Ruff for linting and
+formatting, and `ty check` for static type checking.
 
 Cover:
 

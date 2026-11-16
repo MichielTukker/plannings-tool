@@ -11,6 +11,7 @@ from plannings_tool import (
     load_course,
     parse_course,
 )
+from plannings_tool.loader import display_location
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -105,6 +106,26 @@ def test_unquoted_yaml_date_rejected(definition):
     definition["days"][0]["date"] = date(2027, 3, 1)
     with pytest.raises(CourseValidationError):
         parse_course(yaml.safe_dump(definition))
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (
+            ("days", 0, "schedule", 1, "Presentation", "duration"),
+            "day 1|entry 2|duration",
+        ),
+        (("days", 1, "schedule", 2, "break", "duration"), "day 2|entry 3|duration"),
+        (("days", 1, "schedule", 2, "break", "break"), "day 2|entry 3|break"),
+        (("days", 0, "schedule", 2, "break"), "day 1|entry 3|break"),
+        (("days", 0, "schedule", 0, "trainers", 1), "day 1|entry 1|trainer 2"),
+        (("trainers", 0, "email"), "trainer 1|email"),
+        (("course", "timezone"), "course|timezone"),
+        ((), ""),
+    ],
+)
+def test_display_location(location, expected):
+    assert display_location(location) == expected
 
 
 def test_file_errors(tmp_path):

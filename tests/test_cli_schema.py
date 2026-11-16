@@ -31,9 +31,10 @@ def test_validate_warning_preserves_success(tmp_path, definition):
     result = runner.invoke(app, ["validate", str(path)])
     assert result.exit_code == 0
     assert "Valid course:" in result.stdout
-    assert "Warning" in result.stderr
-    assert "days[0].schedule" in result.stderr
-    assert "missing_manual_breaks" in result.stderr
+    assert "[WARNING] - course.yaml:day 1|schedule - " in result.stderr
+    assert "Day 1" in result.stderr
+    assert "days[0].schedule" not in result.stderr
+    assert "missing_manual_breaks" not in result.stderr
 
 
 def test_invalid_example_reports_multiple_errors():
@@ -41,25 +42,29 @@ def test_invalid_example_reports_multiple_errors():
     result = runner.invoke(app, ["validate", str(path)])
     assert result.exit_code == 1
     assert result.stdout == ""
-    for code in (
-        "time_order",
-        "email_syntax",
-        "string_pattern_mismatch",
-        "calendar_date",
+    for source in (
+        "course|timezone",
+        "trainer 1|email",
+        "defaults|coffee_break",
+        "day 1|date",
+        "day 1|entry 1",
+        "day 1|entry 2|duration",
     ):
-        assert code in result.stderr
+        assert f"[ERROR] - invalid-course.yaml:{source} - " in result.stderr
 
 
-@pytest.mark.parametrize("contents", [None, "course: [", "days: []"])
-def test_validate_failure(tmp_path, contents):
+@pytest.mark.parametrize(
+    ("contents", "source"),
+    [(None, "~"), ("course: [", "1"), ("days: []", "schema_version")],
+)
+def test_validate_failure(tmp_path, contents, source):
     path = tmp_path / "course.yaml"
     if contents is not None:
         path.write_text(contents, encoding="utf-8")
     result = runner.invoke(app, ["validate", str(path)])
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert "course.yaml" in result.stderr
-    assert "Error" in result.stderr
+    assert f"[ERROR] - course.yaml:{source} - " in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -100,27 +105,28 @@ def test_schema_write_failure(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("label", "label_style", "message_style"),
+    ("severity", "ansi"),
     [
-        ("Warning", "bold yellow", "yellow"),
-        ("Error", "bold red", "red"),
+        ("ERROR", "1;31"),
+        ("WARNING", "1;38;5;214"),
+        ("info", "1;32"),
     ],
 )
-def test_issue_output_uses_rich_styles(tmp_path, label, label_style, message_style):
+def test_issue_output_uses_rich_styles(tmp_path, severity, ansi):
     stream = StringIO()
-    console = Console(
-        file=stream, force_terminal=True, color_system="standard", record=True
-    )
+    console = Console(file=stream, force_terminal=True, color_system="256")
     _print_issue(
         console,
-        label,
-        label_style,
+        severity,
         tmp_path / "course.yaml",
-        "days[0].schedule: diagnostic",
-        message_style,
+        "diagnostic",
+        line=12,
+        location=("days", 0),
     )
-    assert label in stream.getvalue()
-    assert "\x1b[" in stream.getvalue()
+    label = severity.upper()
+    assert stream.getvalue() == (
+        f"\x1b[{ansi}m[{label}]\x1b[0m - \x1b[36mcourse.yaml:12\x1b[0m - diagnostic\n"
+    )
 
 
 def test_atomic_export_keeps_original_on_failure(tmp_path, monkeypatch):

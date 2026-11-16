@@ -258,7 +258,8 @@ def test_schedule_cli_rich_preview_and_warnings(tmp_path, definition):
     assert "Opening" in result.stdout
     assert "Coffee break" in result.stdout
     assert "Alex Example" in result.stdout
-    assert "schedule_overflow" in result.stderr
+    assert "[WARNING] - course.yaml:day 1|entry 3 - " in result.stderr
+    assert "schedule_overflow" not in result.stderr
 
 
 def test_schedule_cli_strict_suppresses_preview(tmp_path, definition):
@@ -267,8 +268,9 @@ def test_schedule_cli_strict_suppresses_preview(tmp_path, definition):
     result = runner.invoke(app, ["schedule", str(path), "--strict"])
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert "missing_manual_breaks" in result.stderr
-    assert "unused_time" in result.stderr
+    assert result.stderr.count("[WARNING] - course.yaml:day 1|schedule - ") == 2
+    assert "exceeds four hours" in result.stderr
+    assert "remain unused" in result.stderr
 
 
 def test_schedule_cli_automatic_mode_error(tmp_path, definition):
@@ -278,4 +280,6 @@ def test_schedule_cli_automatic_mode_error(tmp_path, definition):
     result = runner.invoke(app, ["schedule", str(path)])
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert "automatic_breaks_not_supported" in result.stderr
+    assert "[ERROR] - course.yaml:day 1|break_mode - " in result.stderr
+    assert "Automatic break placement is not supported yet" in result.stderr
+    assert "automatic_breaks_not_supported" not in result.stderr

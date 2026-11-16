@@ -13,13 +13,13 @@ from rich.text import Text
 from .loader import (
     CourseValidationError,
     collect_validation_warnings,
+    display_location,
     load_course,
 )
 from .models import CourseDefinition
 from .scheduler import (
     ScheduledDay,
     ScheduledEntry,
-    ScheduleDiagnostic,
     ScheduleResult,
     SchedulingError,
     schedule_course,
@@ -35,21 +35,46 @@ app = typer.Typer(
 )
 
 
+SEVERITY_STYLES = {
+    "ERROR": "bold red",
+    "WARNING": "bold orange1",
+    "INFO": "bold green",
+}
+
+
 def _print_issue(
     console: Console,
-    label: str,
-    label_style: str,
+    severity: str,
     path: Path,
     message: str,
-    message_style: str,
+    *,
+    line: int | None = None,
+    location: tuple[str | int, ...] = (),
 ) -> None:
+    severity = severity.upper()
+    # TODO: carry YAML line numbers into model and scheduling diagnostics; until
+    # then, the day/entry location identifies where the problem is.
+    source = str(line) if line is not None else display_location(location) or "~"
     output = Text()
-    output.append(label, style=label_style)
-    output.append(" ")
-    output.append(str(path), style="cyan")
-    output.append(": ")
-    output.append(message, style=message_style)
-    console.print(output)
+    output.append(f"[{severity}]", style=SEVERITY_STYLES[severity])
+    output.append(" - ")
+    output.append(f"{path.name}:{source}", style="cyan")
+    output.append(f" - {message}")
+    console.print(output, soft_wrap=True)
+
+
+def _print_validation_issues(
+    console: Console, path: Path, error: CourseValidationError
+) -> None:
+    for issue in error.issues:
+        _print_issue(
+            console,
+            "ERROR",
+            path,
+            issue.message,
+            line=issue.line,
+            location=issue.location,
+        )
 
 
 def _format_duration(minutes: int) -> str:
@@ -119,26 +144,6 @@ def _print_schedule(
         console.print(table)
 
 
-def _print_schedule_diagnostic(
-    console: Console, diagnostic: ScheduleDiagnostic
-) -> None:
-    path = ""
-    for part in diagnostic.location:
-        path += f"[{part}]" if isinstance(part, int) else f".{part}"
-    output = Text()
-    if diagnostic.severity == "warning":
-        output.append("Warning", style="bold yellow")
-        output.append(" ", style="yellow")
-        output.append(path.lstrip(".") or "$", style="cyan")
-        output.append(f": {diagnostic.message} [{diagnostic.code}]", style="yellow")
-    else:
-        output.append("Error", style="bold red")
-        output.append(" ", style="red")
-        output.append(path.lstrip(".") or "$", style="cyan")
-        output.append(f": {diagnostic.message} [{diagnostic.code}]", style="red")
-    console.print(output)
-
-
 @app.command(help="Validate a course YAML file.")
 def validate(
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
@@ -148,25 +153,17 @@ def validate(
     try:
         definition = load_course(course)
     except CourseValidationError as exc:
-        for issue in exc.issues:
-            _print_issue(
-                error_console,
-                "Error",
-                "bold red",
-                course,
-                str(issue),
-                "red",
-            )
+        _print_validation_issues(error_console, course, exc)
         raise typer.Exit(code=1) from exc
 
     for warning in collect_validation_warnings(definition):
         _print_issue(
             error_console,
-            "Warning",
-            "bold yellow",
+            "WARNING",
             course,
-            str(warning),
-            "yellow",
+            warning.message,
+            line=warning.line,
+            location=warning.location,
         )
 
     success = Text()
@@ -188,23 +185,27 @@ def schedule(
         definition = load_course(course)
         result = schedule_course(definition)
     except CourseValidationError as exc:
-        for issue in exc.issues:
-            _print_issue(
-                error_console,
-                "Error",
-                "bold red",
-                course,
-                str(issue),
-                "red",
-            )
+        _print_validation_issues(error_console, course, exc)
         raise typer.Exit(code=1) from exc
     except SchedulingError as exc:
         for diagnostic in exc.diagnostics:
-            _print_schedule_diagnostic(error_console, diagnostic)
+            _print_issue(
+                error_console,
+                diagnostic.severity,
+                course,
+                diagnostic.message,
+                location=diagnostic.location,
+            )
         raise typer.Exit(code=1) from exc
 
     for diagnostic in result.warnings:
-        _print_schedule_diagnostic(error_console, diagnostic)
+        _print_issue(
+            error_console,
+            diagnostic.severity,
+            course,
+            diagnostic.message,
+            location=diagnostic.location,
+        )
     if strict and result.warnings:
         raise typer.Exit(code=1)
     _print_schedule(Console(), result, definition)
@@ -222,10 +223,12 @@ def schema(
     try:
         write_schema(output)
     except OSError as exc:
-        error = Text()
-        error.append("Error", style="bold red")
-        error.append(f" Cannot write schema to {output}: {exc}", style="red")
-        error_console.print(error)
+        _print_issue(
+            error_console,
+            "ERROR",
+            output,
+            f"Cannot write schema: {exc}",
+        )
         raise typer.Exit(code=1) from exc
 
     message = Text()

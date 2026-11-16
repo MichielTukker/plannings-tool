@@ -16,13 +16,17 @@ uv run plan schema --output course.schema.json
 uv run plan --help
 ```
 
-The CLI uses Typer for commands and Rich for terminal formatting. Success
-messages are green, warnings yellow, and errors red when the terminal supports
-color; redirected output remains readable without color. Validation prints a
-short confirmation on success. Invalid files produce field-path diagnostics
-on stderr, for example
-`days[0].schedule[0].Presentation.duration`. Indexes are zero-based. YAML syntax
-and duplicate-key errors also include line/column information.
+The CLI uses Typer for commands and Rich for terminal formatting. In
+diagnostics, the severity is red for errors, orange for warnings, and green for
+info; the file location is cyan and the message uses the default terminal
+color. Redirected output remains readable without color. Validation prints a
+short confirmation on success. Diagnostics use
+`[ERROR] - filename:source - message` or
+`[WARNING] - filename:source - message` on stderr. The source is the YAML line
+for syntax errors. Other diagnostics do not have line numbers yet, so they show
+a 1-based location such as `day 1|entry 3|duration`, `trainer 2|email`, or
+`course|timezone`; entries count sessions and breaks. `~` marks a file-level
+problem without a location.
 
 Exit codes are `0` for success, `1` for input/file errors, and `2` for invalid
 command-line arguments. Expected failures do not print tracebacks. Schema

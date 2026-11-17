@@ -2,7 +2,8 @@
 
 A Python course-planning tool. Phases 1 and 2 provide YAML validation, JSON
 Schema export, and a sequential schedule preview with manually placed breaks.
-Automatic break insertion and PDF generation are not implemented yet.
+Automatic break insertion (phase 3) and PDF, per-day Gantt PNG, and Markdown
+timetable rendering (phase 4) are planned but not implemented yet.
 
 ## Install and run
 
@@ -226,6 +227,8 @@ and `Diagnostic` warnings. It raises `SchedulingError` for unsupported
 automatic breaks and timezone resolution failures.
 
 Tests check that the committed schema matches model generation. See
-[IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) and
-[PHASE-1-PLAN.md](PHASE-1-PLAN.md) and
-[PHASE-2-PLAN.md](PHASE-2-PLAN.md) for scope and acceptance criteria.
+[IMPLEMENTATION-PLAN.md](doc/IMPLEMENTATION-PLAN.md),
+[PHASE-1-PLAN.md](doc/PHASE-1-PLAN.md),
+[PHASE-2-PLAN.md](doc/PHASE-2-PLAN.md),
+[PHASE-3-PLAN.md](doc/PHASE-3-PLAN.md) and
+[PHASE-4-PLAN.md](doc/PHASE-4-PLAN.md) for scope and acceptance criteria.

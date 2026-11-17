@@ -314,9 +314,9 @@ Exit codes:
   behavior.
 
 Keep `--help` useful at the root and subcommand levels. Do not expose render or
-scheduling commands before they are implemented. The future PDF interface is
-`plan render course.yaml --output schedule.pdf`, replacing the earlier flat CLI
-proposal.
+scheduling commands before they are implemented. The future rendering interface
+is `plan render course.yaml [--output-dir DIR] [--format pdf|png|md ...]` (see
+[PHASE-4-PLAN.md](PHASE-4-PLAN.md)), replacing the earlier flat CLI proposal.
 
 ### Step 6: Tests, schema artifact, and documentation
 

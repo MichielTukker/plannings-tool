@@ -3,15 +3,17 @@
 ## Goal and scope
 
 Build a Python tool that reads a schema-validated YAML course definition and
-generates a PDF schedule. Version 1 supports multi-day courses with explicit day
-groupings, sequential sessions, and a single track.
+generates a PDF schedule, a transparent Gantt-chart PNG per day, and a Markdown
+timetable. Version 1 supports multi-day courses with explicit day groupings,
+sequential sessions, and a single track.
 
 Provide a local CLI backed by reusable Python functions. Keep input parsing,
 scheduling, and rendering separate so future email templates, action lists,
 requirement lists, and a web frontend can consume the same resolved schedule.
 
-The repository currently contains a Python 3.14 package skeleton and a `plan`
-command.
+Phases 1 and 2 are implemented: validation, JSON Schema export, manual-break
+scheduling, and the `plan schedule` preview. Phase 3 (automatic breaks) and
+phase 4 (rendering) are planned.
 
 ## 1. Define the input contract
 
@@ -19,6 +21,9 @@ See [PHASE-1-PLAN.md](PHASE-1-PLAN.md) for the agreed YAML contract,
 implementation sequence, and acceptance criteria.
 See [PHASE-2-PLAN.md](PHASE-2-PLAN.md) for the detailed manual-scheduling and
 timezone implementation plan.
+See [PHASE-3-PLAN.md](PHASE-3-PLAN.md) for automatic breaks and session
+splitting, and [PHASE-4-PLAN.md](PHASE-4-PLAN.md) for PDF, PNG, and Markdown
+rendering.
 
 Use Pydantic models as the source of truth and generate a JSON Schema for YAML
 editor validation and completion. Load YAML with PyYAML, then validate it. Reject
@@ -115,38 +120,63 @@ override break defaults.
 
 ### Automatic breaks
 
-Automatic mode rejects manual break entries. Use this shared daily policy:
+Automatic mode rejects manual break entries. Use this shared daily policy (see
+[PHASE-3-PLAN.md](PHASE-3-PLAN.md) for the full algorithm):
 
 | Break | Preferred start | Duration | Allowed start-time shift |
 |---|---|---:|---:|
-| Morning coffee | 10:30 | 15 min | 30 min earlier or later |
-| Lunch | 12:15 | 45 min | 15 min earlier or later |
-| Afternoon coffee | 15:00 | 15 min | 30 min earlier or later |
+| Morning coffee | 10:30 | `defaults.coffee_break` (15 min) | 30 min earlier or later |
+| Lunch | 12:15 | `defaults.lunch` (45 min) | 15 min earlier or later |
+| Afternoon coffee | 15:00 | `defaults.coffee_break` (15 min) | 30 min earlier or later |
 
-Placement rules:
+Placement rules, applied to active breaks in chronological order within each
+placement pass:
 
-1. Prefer the nearest valid session boundary within the allowed window, choosing
-   the earlier boundary on a tie.
-2. Otherwise split an eligible session at the preferred time. Each fragment must
-   be at least 15 minutes; do not create empty fragments.
-3. If neither placement is possible, fail with a clear error explaining how to
-   revise the schedule or switch the day to manual breaks.
+1. Prefer the nearest boundary between two sessions within the allowed window,
+   choosing the earlier boundary on a tie. The day start and the end of the
+   last session are not boundaries.
+2. Otherwise split an eligible session at the preferred time. If a fragment
+   would be shorter than 15 minutes, move the split 15 minutes later or
+   earlier. Each fragment must be at least 15 minutes.
+3. Otherwise permanently omit the break if provisional activities end at or
+   before its preferred start (info diagnostic). Remove its reserved duration,
+   reallocate Interactive, and restart placement from the original sessions.
+   The omitted break is never retested, even if reallocation extends activities
+   past its preferred start.
+4. Otherwise fail with a clear error explaining how to revise the schedule or
+   switch the day to manual breaks.
 
-Only consider breaks whose preferred start falls inside the configured day.
-Omit breaks after activities have finished.
+Only consider breaks whose preferred start falls strictly inside the
+configured day. Report split sessions as info diagnostics.
 
 ### Flexible allocation and fit
 
-Allocate remaining time after accounting for fixed activities and applicable
-breaks. If fewer than 15 minutes remain, allocate 15 minutes to the Interactive
-session and warn about the resulting overflow.
+Allocate remaining time after accounting for fixed activities and breaks.
+Manual mode subtracts the supplied breaks. Automatic mode initially reserves
+all applicable breaks, then releases reservations for permanently omitted
+breaks. The final Interactive duration subtracts only actually placed breaks.
+If fewer than 15 minutes remain, allocate 15 minutes and warn about the
+resulting overflow.
 
 Warn about overflow and unused time; do not silently resize fixed sessions or
 move activities to another day.
 
-Flexible duration and automatic-break placement affect each other. Resolve them
-together and verify that the resulting schedule is consistent, rather than
-calculating each once in isolation.
+Flexible duration and automatic-break placement affect each other. An
+Interactive day can provisionally end before a preferred break start while
+that break's duration is still reserved. Omission is decided on that timeline
+and stays final; returning the reservation to Interactive must not reintroduce
+the break. Rebuild all remaining placements and splits after reallocation,
+because Interactive can occur anywhere in the input. Each restart removes one
+active break, giving at most four passes for the three-rule policy. If a
+remaining break cannot be placed, report an error rather than keep stale
+timings. Calculate fit warnings only from the final allocation.
+
+For example, a 09:00-15:05 day with two 90-minute Presentations followed by
+Interactive initially reserves 75 break minutes and assigns 110 minutes to
+Interactive. After morning coffee and lunch, activities end at 14:50, so
+afternoon coffee is omitted. Reallocation assigns 125 minutes to Interactive,
+which now ends at 15:05; afternoon coffee remains omitted, with an info
+diagnostic explaining the provisional end. See the phase-3 worked examples.
 
 ## 3. Produce a renderer-independent result
 
@@ -161,71 +191,97 @@ Distinguish errors from warnings:
 
 | Category | Examples | Normal behavior |
 |---|---|---|
-| Error | Invalid input, unknown trainer, impossible break placement | Fail without generating a PDF |
-| Warning | Overflow, unused time, insufficient remaining time | Generate PDF with warnings |
+| Error | Invalid input, unknown trainer, impossible break placement, layout overflow | Fail without generating output |
+| Warning | Overflow, unused time, insufficient remaining time | Generate outputs with warnings |
+| Info | Session split by a break, automatic break omitted | Print only; never affects exit status |
 
-This model is the interface for PDF rendering, future outputs, and the future web
-frontend. Renderers must not reinterpret scheduling rules.
+This model is the interface for PDF, PNG, and Markdown rendering, future
+outputs, and the future web frontend. Renderers must not reinterpret
+scheduling rules.
 
-## 4. Implement the PDF
+## 4. Render the outputs
 
-Use ReportLab, initially without an external charting library, to control page
-layout and draw the timeline directly.
+See [PHASE-4-PLAN.md](PHASE-4-PLAN.md) for the detailed rendering plan.
 
-Each day occupies exactly one portrait A4 page containing:
+Draw the Gantt chart with matplotlib. Use one figure builder for both the
+standalone PNG and the chart embedded in the PDF. Lay out PDF pages with
+ReportLab.
+
+The Gantt chart has one row per original session. The fragments of a split
+session appear as separate bars on that row. Breaks are labelled shaded
+vertical bands across all rows. A horizontal time axis shows course-local times.
+
+**PDF:** each day occupies exactly one portrait A4 page containing:
 
 - Course/day heading and relevant metadata.
 - Course description on day 1 only.
-- A Gantt chart with a horizontal time axis.
+- The Gantt chart, embedded as a 300 DPI image.
 - A timetable showing the same activities, times, breaks, and trainers.
 - A trainer legend and visible scheduling warnings.
 
-Assign consistent trainer colors across days, using explicit colors when
-provided. Sessions with multiple trainers use repeating diagonal bands in all
-assigned trainer colors. Include trainer names in the table for grayscale
-readability.
+**Gantt PNG:** one 1920 px wide PNG per day with a transparent background.
+Each PNG has the time axis, session labels, trainer legend, heading, and logo.
+
+**Markdown:** one file with a course heading and, per day, a metadata line, a
+Start/End/Duration/Activity/Type/Trainers table, and the day's warnings.
+
+Assign consistent trainer colors across days and outputs. Use explicit colors
+when provided; otherwise use a colorblind-safe palette. Sessions with multiple
+trainers use repeating diagonal bands in all assigned trainer colors. Include
+trainer names in the tables for grayscale readability.
 
 Display actual scheduled times, including overruns, in course-local time. Use
 English labels, 24-hour times, ISO dates in YAML, and show the IANA timezone
 identifier in output metadata.
 
-Reserve space for a small Deltares logo when a local asset is supplied; omit the
-logo otherwise. Do not download logo assets.
+Use the provided transparent PNG at `assets/Deltares_logo_D-blauw_RGB.png` as
+the default logo; package a copy at
+`src/plannings_tool/assets/deltares-logo.png`. Do not download or recreate it.
+Show it in the PDF header and PNGs. `--logo PATH` overrides it; `--no-logo`
+omits it.
 
-Define a minimum readable font size. Fail with a clear layout error if content
+Use fixed font sizes, none below 8 pt. Fail with a clear layout error if a day
 cannot fit on one page; do not silently clip content or add a second page.
 
 ## 5. Add the CLI
 
-Initial interface:
+Interface:
 
 ```text
 plan validate course.yaml
 plan schema --output course.schema.json
-plan render course.yaml --output schedule.pdf
-plan render course.yaml --output schedule.pdf --strict
+plan schedule course.yaml [--strict]
+plan render course.yaml [--output-dir DIR] [--format pdf|png|md ...]
+                        [--logo PATH | --no-logo] [--strict]
 ```
 
-Validation and schema export are implemented in phase 1; rendering comes later.
+Validation and schema export are implemented in phase 1 and the schedule
+preview in phase 2. Rendering comes in phase 4. `plan render` writes
+`<stem>.pdf`, `<stem>-day-<n>.png`, and `<stem>.md` to the output directory
+(default: current directory). It writes all formats by default.
 
-Print warnings to stderr and include them in the PDF. In normal mode, warnings
-do not change the successful exit status.
+Print warnings to stderr and include them in the PDF and Markdown output. In
+normal mode, warnings do not change the successful exit status.
 
-With `--strict`, scheduling warnings cause a nonzero exit without producing a
-new PDF. Invalid YAML, schema errors, scheduling errors, and layout errors also
+With `--strict`, scheduling warnings cause a nonzero exit without writing
+output. Invalid YAML, schema errors, scheduling errors, and layout errors also
 produce a nonzero exit.
 
-Write PDFs atomically so a failed run does not leave a partial output.
+Render all requested outputs in memory first; rendering failures write nothing.
+Then replace each destination atomically, so individual files are never
+partially written. This is not an all-or-nothing multi-file transaction:
+on a write failure, report which files were already replaced and clean up
+temporary files.
 
 ## 6. Deliver in milestones
 
-| Milestone | Deliverable |
-|---|---|
-| 1 | Models, generated JSON Schema, updated example YAML, helpful validation errors |
-| 2 | Typed date/time runtime values, optional timezone with Amsterdam default, DST validation, manual scheduling, flexible allocation, structured diagnostics |
-| 3 | Automatic breaks, session splitting, deterministic placement |
-| 4 | PDF layout, trainer patterns, CLI integration |
-| 5 | Documentation and end-to-end examples |
+| Milestone | Deliverable | Status |
+|---|---|---|
+| 1 | Models, generated JSON Schema, updated example YAML, helpful validation errors | Done |
+| 2 | Typed date/time runtime values, optional timezone with Amsterdam default, DST validation, manual scheduling, flexible allocation, structured diagnostics | Done |
+| 3 | Automatic breaks, session splitting, deterministic placement, info diagnostics | Planned ([PHASE-3-PLAN.md](PHASE-3-PLAN.md)) |
+| 4 | PDF, per-day transparent Gantt PNGs, Markdown timetable, trainer colors/stripes, bundled logo, `plan render` | Planned ([PHASE-4-PLAN.md](PHASE-4-PLAN.md)) |
+| 5 | Documentation and end-to-end examples | Planned |
 
 ## Validation strategy
 
@@ -243,17 +299,23 @@ Cover:
 - Flexible sessions before and after fixed activities and breaks.
 - Flexible minimum duration and overflow.
 - Automatic-break boundary selection, tie-breaking, and allowed windows.
-- Splitting and minimum fragment lengths.
+- Splitting, the ±15 minute split shift, and minimum fragment lengths.
 - Unsplittable sessions spanning an entire break window.
 - Rejection of manual breaks in automatic mode.
-- Omission of automatic breaks outside the day or after activities finish.
+- Inapplicable breaks outside the day; permanent omission based on provisional
+  activity end, including Interactive reallocation and rebuilt placements.
+- Interactive subtracting only placed breaks, with no stale fit or split
+  diagnostics after a restart.
 - Warning behavior and strict-mode failures.
 - Atomic output behavior on failure.
 
-PDF checks cover page count, expected text, layout failures, and visual inspection
-of representative schedules, including multi-trainer hatching.
+PDF checks cover page count, expected text, layout failures, and visual
+inspection of representative schedules, including multi-trainer stripes. PNG
+checks cover size, transparency, and one file per day. Markdown checks compare
+exact output for the example courses.
 
 ## Main implementation risks
 
 Automatic-break allocation and fitting both views legibly on portrait A4 are the
-highest-risk parts. Prototype these early, before polishing the CLI or branding.
+highest-risk parts. Prototype the Gantt chart early, before polishing the CLI
+or branding.

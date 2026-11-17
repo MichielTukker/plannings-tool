@@ -3,6 +3,7 @@
 from .diagnostics import (
     CourseValidationError,
     Diagnostic,
+    DiagnosticCode,
     PlanningError,
     SchedulingError,
     Severity,
@@ -22,6 +23,7 @@ __all__ = [
     "CourseDefinition",
     "CourseValidationError",
     "Diagnostic",
+    "DiagnosticCode",
     "PlanningError",
     "ScheduleResult",
     "SessionEntry",

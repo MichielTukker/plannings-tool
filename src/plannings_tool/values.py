@@ -7,6 +7,8 @@ from typing import Annotated
 from pydantic import BeforeValidator, WithJsonSchema
 from pydantic_core import PydanticCustomError
 
+from .diagnostics import DiagnosticCode
+
 DURATION_PATTERN = r"^(?:[1-9][0-9]*m|[1-9][0-9]*h(?: [1-5]?[1-9]m| [1-5]0m)?)$"
 TIME_PATTERN = r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
 DATE_PATTERN = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
@@ -15,7 +17,7 @@ DATE_PATTERN = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 def parse_duration_minutes(value: object) -> int:
     if not isinstance(value, str) or re.fullmatch(DURATION_PATTERN, value) is None:
         raise PydanticCustomError(
-            "duration_syntax",
+            DiagnosticCode.DURATION_SYNTAX.value,
             "Invalid duration; use a value such as '15m' or '1h 15m'",
         )
     total = 0
@@ -26,19 +28,24 @@ def parse_duration_minutes(value: object) -> int:
 
 def parse_clock_time(value: object) -> time:
     if not isinstance(value, str) or re.fullmatch(TIME_PATTERN, value) is None:
-        raise PydanticCustomError("value_syntax", "Invalid time; expected HH:MM")
+        raise PydanticCustomError(
+            DiagnosticCode.VALUE_SYNTAX.value, "Invalid time; expected HH:MM"
+        )
     hours, minutes = value.split(":")
     return time(hour=int(hours), minute=int(minutes))
 
 
 def parse_calendar_date(value: object) -> date:
     if not isinstance(value, str) or re.fullmatch(DATE_PATTERN, value) is None:
-        raise PydanticCustomError("value_syntax", "Invalid date; expected YYYY-MM-DD")
+        raise PydanticCustomError(
+            DiagnosticCode.VALUE_SYNTAX.value, "Invalid date; expected YYYY-MM-DD"
+        )
     try:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise PydanticCustomError(
-            "calendar_date", "Date must be a real calendar date"
+            DiagnosticCode.CALENDAR_DATE.value,
+            "Date must be a real calendar date",
         ) from exc
 
 

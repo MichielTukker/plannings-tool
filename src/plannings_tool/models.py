@@ -22,11 +22,12 @@ from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, InitErrorDetails, PydanticCustomError
 from pydantic_core.core_schema import ValidatorFunctionWrapHandler
 
+from .diagnostics import DiagnosticCode
 from .values import CalendarDate, ClockTime, Duration, minutes_since_midnight
 
 
 def _friendly_pattern_error(
-    code: LiteralString, message: LiteralString
+    code: DiagnosticCode, message: LiteralString
 ) -> WrapValidator:
     def validate(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
         try:
@@ -35,7 +36,7 @@ def _friendly_pattern_error(
             if any(
                 error["type"] == "string_pattern_mismatch" for error in exc.errors()
             ):
-                raise PydanticCustomError(code, message) from exc
+                raise PydanticCustomError(code.value, message) from exc
             raise
 
     return WrapValidator(validate)
@@ -46,7 +47,7 @@ Nonblank = Annotated[
     str,
     Field(pattern=NONBLANK_PATTERN),
     _friendly_pattern_error(
-        "nonblank_syntax", "Value must contain a non-whitespace character"
+        DiagnosticCode.NONBLANK_SYNTAX, "Value must contain a non-whitespace character"
     ),
     WithJsonSchema({"type": "string", "pattern": NONBLANK_PATTERN}, mode="validation"),
 ]
@@ -56,7 +57,7 @@ TrainerId = Annotated[
     str,
     Field(pattern=TRAINER_ID_PATTERN),
     _friendly_pattern_error(
-        "trainer_id_syntax",
+        DiagnosticCode.TRAINER_ID_SYNTAX,
         "Trainer ID must start with a lowercase letter and contain only lowercase "
         "letters, digits, '_' or '-'",
     ),
@@ -69,7 +70,8 @@ Color = Annotated[
     str,
     Field(pattern=COLOR_PATTERN),
     _friendly_pattern_error(
-        "color_syntax", "Color must be a six-digit hex value, such as #336699"
+        DiagnosticCode.COLOR_SYNTAX,
+        "Color must be a six-digit hex value, such as #336699",
     ),
     WithJsonSchema({"type": "string", "pattern": COLOR_PATTERN}, mode="validation"),
 ]
@@ -77,14 +79,16 @@ BreakMode = Literal["manual", "automatic"]
 
 
 def error_details(
-    code: LiteralString,
+    code: DiagnosticCode,
     message: LiteralString,
     location: tuple[str | int, ...],
     value: object,
     context: dict[str, object] | None = None,
 ) -> InitErrorDetails:
     return InitErrorDetails(
-        type=PydanticCustomError(code, message, context), loc=location, input=value
+        type=PydanticCustomError(code.value, message, context),
+        loc=location,
+        input=value,
     )
 
 
@@ -103,7 +107,7 @@ class InputModel(BaseModel):
             if input_name in value and value[input_name] is None:
                 errors.append(
                     error_details(
-                        "null_not_allowed",
+                        DiagnosticCode.NULL_NOT_ALLOWED,
                         "Omit optional fields instead of using null",
                         (input_name,),
                         None,
@@ -147,7 +151,7 @@ class Course(InputModel):
             ZoneInfo(value)
         except (ValueError, ZoneInfoNotFoundError) as exc:
             raise PydanticCustomError(
-                "timezone_name",
+                DiagnosticCode.TIMEZONE_NAME.value,
                 "Unknown IANA timezone: {timezone}",
                 {"timezone": value},
             ) from exc
@@ -160,7 +164,10 @@ class Course(InputModel):
                 type(self).__name__,
                 [
                     error_details(
-                        "time_order", "End must be later than start", ("end",), self.end
+                        DiagnosticCode.TIME_ORDER,
+                        "End must be later than start",
+                        ("end",),
+                        self.end,
                     )
                 ],
             )
@@ -180,7 +187,7 @@ class Trainer(InputModel):
             validate_email(value, check_deliverability=False)
         except EmailNotValidError as exc:
             raise PydanticCustomError(
-                "email_syntax",
+                DiagnosticCode.EMAIL_SYNTAX.value,
                 "Invalid email address: {reason}",
                 {"reason": str(exc)},
             ) from exc
@@ -202,7 +209,7 @@ class Session(InputModel):
     def check_unique_trainers(cls, value: list[str]) -> list[str]:
         if len(set(value)) != len(value):
             raise PydanticCustomError(
-                "duplicate_trainer_reference",
+                DiagnosticCode.DUPLICATE_TRAINER_REFERENCE.value,
                 "A trainer may appear only once within a session",
             )
         return value
@@ -220,7 +227,7 @@ class FixedSession(Session):
                 type(self).__name__,
                 [
                     error_details(
-                        "duration_minimum",
+                        DiagnosticCode.DURATION_MINIMUM,
                         "{session_type} requires at least {minimum} minutes",
                         ("duration",),
                         self.duration,
@@ -293,7 +300,7 @@ ScheduleEntry = Annotated[
     Annotated[Break, Tag("break")] | Annotated[SessionEntry, Tag("session")],
     Discriminator(
         entry_kind,
-        custom_error_type="schedule_entry_type",
+        custom_error_type=DiagnosticCode.SCHEDULE_ENTRY_TYPE.value,
         custom_error_message=(
             "Entry must be a break or a session with a recognized type"
         ),
@@ -337,7 +344,8 @@ class CourseDefinition(InputModel):
     def check_schema_version(cls, value: object) -> object:
         if type(value) is not int:
             raise PydanticCustomError(
-                "schema_version", "schema_version must be integer 1"
+                DiagnosticCode.SCHEMA_VERSION.value,
+                "schema_version must be integer 1",
             )
         return value
 
@@ -349,7 +357,7 @@ class CourseDefinition(InputModel):
             if trainer.id in trainer_ids:
                 errors.append(
                     error_details(
-                        "duplicate_trainer_id",
+                        DiagnosticCode.DUPLICATE_TRAINER_ID,
                         "Trainer IDs must be unique",
                         ("trainers", index, "id"),
                         trainer.id,
@@ -364,7 +372,7 @@ class CourseDefinition(InputModel):
             if day.label in labels:
                 errors.append(
                     error_details(
-                        "duplicate_day_label",
+                        DiagnosticCode.DUPLICATE_DAY_LABEL,
                         "Day labels must be unique",
                         (*path, "label"),
                         day.label,
@@ -375,7 +383,7 @@ class CourseDefinition(InputModel):
                 if previous_date is not None and day.date <= previous_date:
                     errors.append(
                         error_details(
-                            "date_order",
+                            DiagnosticCode.DATE_ORDER,
                             "Supplied dates must be unique and strictly increasing",
                             (*path, "date"),
                             day.date,
@@ -385,7 +393,7 @@ class CourseDefinition(InputModel):
             if day.effective_start(self.course) >= day.effective_end(self.course):
                 errors.append(
                     error_details(
-                        "time_order",
+                        DiagnosticCode.TIME_ORDER,
                         "Effective end must be later than effective start",
                         (*path, "end"),
                         day.end,
@@ -398,7 +406,7 @@ class CourseDefinition(InputModel):
                     if day.effective_break_mode(self.defaults) == "automatic":
                         errors.append(
                             error_details(
-                                "manual_break_in_automatic",
+                                DiagnosticCode.MANUAL_BREAK_IN_AUTOMATIC,
                                 "Manual breaks are not allowed in automatic mode",
                                 (*entry_path, "break"),
                                 entry.kind,
@@ -409,7 +417,7 @@ class CourseDefinition(InputModel):
                     if interactive_seen:
                         errors.append(
                             error_details(
-                                "multiple_interactive",
+                                DiagnosticCode.MULTIPLE_INTERACTIVE,
                                 "At most one Interactive session is allowed per day",
                                 (*entry_path, "type"),
                                 entry.type,
@@ -420,7 +428,7 @@ class CourseDefinition(InputModel):
                     if trainer_id not in trainer_ids:
                         errors.append(
                             error_details(
-                                "unknown_trainer",
+                                DiagnosticCode.UNKNOWN_TRAINER,
                                 "Unknown trainer ID: {trainer_id}",
                                 (*entry_path, "trainers", trainer_index),
                                 trainer_id,

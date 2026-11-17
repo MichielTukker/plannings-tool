@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
-from .diagnostics import CourseValidationError, Diagnostic, Severity
+from .diagnostics import CourseValidationError, Diagnostic, DiagnosticCode, Severity
 from .models import CourseDefinition
 
 
@@ -53,9 +53,11 @@ def parse_course(text: str) -> CourseDefinition:
             [
                 Diagnostic(
                     severity=Severity.ERROR,
-                    code="duplicate_key"
-                    if isinstance(exc, DuplicateKeyError)
-                    else "yaml_syntax",
+                    code=(
+                        DiagnosticCode.DUPLICATE_KEY
+                        if isinstance(exc, DuplicateKeyError)
+                        else DiagnosticCode.YAML_SYNTAX
+                    ),
                     location=(),
                     message=getattr(exc, "problem", None) or str(exc),
                     line=mark.line + 1 if mark is not None else None,
@@ -68,7 +70,7 @@ def parse_course(text: str) -> CourseDefinition:
             [
                 Diagnostic(
                     severity=Severity.ERROR,
-                    code="root_mapping",
+                    code=DiagnosticCode.ROOT_MAPPING,
                     location=(),
                     message="Expected a YAML mapping at the root",
                 )
@@ -99,7 +101,7 @@ def load_course(path: str | Path) -> CourseDefinition:
             [
                 Diagnostic(
                     severity=Severity.ERROR,
-                    code="file_read",
+                    code=DiagnosticCode.FILE_READ,
                     location=(),
                     message=f"Cannot read course file: {exc}",
                 )

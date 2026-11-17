@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .diagnostics import Diagnostic, Location, SchedulingError, Severity
+from .diagnostics import Diagnostic, DiagnosticCode, Location, SchedulingError, Severity
 from .models import (
     Break,
     CourseDefinition,
@@ -101,7 +101,9 @@ class _DayWindow:
     available_minutes: int
 
 
-def _scheduling_error(code: str, message: str, location: Location) -> SchedulingError:
+def _scheduling_error(
+    code: DiagnosticCode, message: str, location: Location
+) -> SchedulingError:
     return SchedulingError(
         [
             Diagnostic(
@@ -129,13 +131,13 @@ def _localize_wall_time(
             candidates[instant] = candidate
     if not candidates:
         raise _scheduling_error(
-            "nonexistent_local_time",
+            DiagnosticCode.NONEXISTENT_LOCAL_TIME,
             f"{local_date} {local_time:%H:%M} does not exist in {zone.key}",
             location,
         )
     if len(candidates) > 1:
         raise _scheduling_error(
-            "ambiguous_local_time",
+            DiagnosticCode.AMBIGUOUS_LOCAL_TIME,
             f"{local_date} {local_time:%H:%M} occurs twice in {zone.key}",
             location,
         )
@@ -152,7 +154,7 @@ def _reject_offset_transition(
 ) -> None:
     if start_at.utcoffset() != end_at.utcoffset():
         raise _scheduling_error(
-            "timezone_transition",
+            DiagnosticCode.TIMEZONE_TRANSITION,
             f"Day interval crosses a timezone offset change in {zone.key}",
             ("days", day_index),
         )
@@ -180,7 +182,7 @@ def _resolve_day_window(
     available = _available_minutes(start_at, end_at)
     if available <= 0:
         raise _scheduling_error(
-            "invalid_day_interval",
+            DiagnosticCode.INVALID_DAY_INTERVAL,
             "Resolved day end must be later than its start",
             ("days", day_index, "end"),
         )
@@ -243,7 +245,7 @@ def _allocation_diagnostics(
         diagnostics.append(
             Diagnostic(
                 severity=Severity.WARNING,
-                code="interactive_minimum_overflow",
+                code=DiagnosticCode.INTERACTIVE_MINIMUM_OVERFLOW,
                 location=("days", day_index, "schedule", interactive_index),
                 message=f"Interactive needs its 15-minute minimum, causing "
                 f"{15 - remaining} minutes of overflow",
@@ -261,7 +263,7 @@ def _allocation_diagnostics(
             diagnostics.append(
                 Diagnostic(
                     severity=Severity.WARNING,
-                    code="schedule_overflow",
+                    code=DiagnosticCode.SCHEDULE_OVERFLOW,
                     location=("days", day_index, "schedule", crossing_index),
                     message=f"Schedule exceeds the configured day by "
                     f"{fixed_total - available_minutes} minutes",
@@ -271,7 +273,7 @@ def _allocation_diagnostics(
             diagnostics.append(
                 Diagnostic(
                     severity=Severity.WARNING,
-                    code="unused_time",
+                    code=DiagnosticCode.UNUSED_TIME,
                     location=("days", day_index, "schedule"),
                     message=f"{available_minutes - fixed_total} minutes remain unused",
                 )
@@ -375,7 +377,7 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
             [
                 Diagnostic(
                     severity=Severity.ERROR,
-                    code="automatic_breaks_not_supported",
+                    code=DiagnosticCode.AUTOMATIC_BREAKS_NOT_SUPPORTED,
                     location=("days", index, "break_mode"),
                     message=f"Automatic break placement is not supported yet for "
                     f"day '{day.label}'; use manual break mode",
@@ -388,7 +390,7 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
         zone = ZoneInfo(course.course.timezone)
     except (ValueError, ZoneInfoNotFoundError) as exc:
         raise _scheduling_error(
-            "timezone_unavailable",
+            DiagnosticCode.TIMEZONE_UNAVAILABLE,
             f"Timezone data is unavailable for {course.course.timezone}",
             ("course", "timezone"),
         ) from exc

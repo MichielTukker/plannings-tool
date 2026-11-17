@@ -1,6 +1,6 @@
 """Semantic course checks that do not prevent loading a course."""
 
-from .diagnostics import Diagnostic, Severity
+from .diagnostics import Diagnostic, DiagnosticCode, Severity
 from .models import Break, CourseDefinition
 
 
@@ -16,7 +16,7 @@ def check_missing_manual_breaks(course: CourseDefinition) -> list[Diagnostic]:
             warnings.append(
                 Diagnostic(
                     severity=Severity.WARNING,
-                    code="missing_manual_breaks",
+                    code=DiagnosticCode.MISSING_MANUAL_BREAKS,
                     location=("days", index, "schedule"),
                     message=(
                         f"Day '{day.label}' exceeds four hours in manual break mode "

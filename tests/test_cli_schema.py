@@ -96,6 +96,20 @@ def test_schema_export_and_drift(tmp_path):
     assert path.read_bytes() == (ROOT / "course.schema.json").read_bytes()
 
 
+def test_schema_has_native_session_type_discriminator():
+    schedule = generate_schema()["$defs"]["Day"]["properties"]["schedule"]["items"]
+    session = next(
+        variant for variant in schedule["oneOf"] if "discriminator" in variant
+    )
+    assert session["discriminator"]["propertyName"] == "type"
+    assert set(session["discriminator"]["mapping"]) == {
+        "Presentation",
+        "Exercise",
+        "Excursion",
+        "Interactive",
+    }
+
+
 def test_schema_write_failure(tmp_path):
     path = tmp_path / "missing" / "schema.json"
     result = runner.invoke(app, ["schema", "--output", str(path)])

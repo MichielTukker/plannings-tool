@@ -197,8 +197,8 @@ the Python API.
 - Define immutable scheduled-day, scheduled-entry, and result types. Reuse the
   shared `Diagnostic`, `Severity`, and `PlanningError` types from
   `diagnostics.py` for warnings and scheduling errors.
-- Reuse `SESSION_RULES`, defaults, effective day properties, and existing
-  validation warnings.
+- Reuse session-class duration metadata, defaults, effective day properties,
+  and existing validation warnings.
 - Define stable warning/error codes and path formatting once, not separately
   in the CLI.
 

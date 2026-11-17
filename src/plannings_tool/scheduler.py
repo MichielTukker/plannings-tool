@@ -11,15 +11,13 @@ from .models import (
     Break,
     CourseDefinition,
     Day,
-    Excursion,
-    Exercise,
     Interactive,
-    Presentation,
     ScheduleEntry,
+    SessionEntry,
 )
 from .values import minutes_since_midnight
 
-ScheduledSource = Break | Presentation | Exercise | Excursion | Interactive
+ScheduledSource = Break | SessionEntry
 
 
 @dataclass(frozen=True)

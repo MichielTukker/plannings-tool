@@ -9,7 +9,7 @@ from .diagnostics import (
     Severity,
 )
 from .loader import collect_validation_warnings, load_course, parse_course
-from .models import CourseDefinition
+from .models import CourseDefinition, SessionEntry
 from .scheduler import (
     ScheduledDay,
     ScheduledEntry,
@@ -24,6 +24,7 @@ __all__ = [
     "Diagnostic",
     "PlanningError",
     "ScheduleResult",
+    "SessionEntry",
     "ScheduledDay",
     "ScheduledEntry",
     "SchedulingError",

@@ -1,8 +1,7 @@
 """Course input models; no timetable calculation takes place here."""
 
 import re
-from dataclasses import dataclass
-from typing import Annotated, Literal, LiteralString, Self
+from typing import Annotated, ClassVar, Literal, LiteralString, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from email_validator import EmailNotValidError, validate_email
@@ -26,22 +25,6 @@ Nonblank = Annotated[str, Field(pattern=r"\S")]
 TrainerId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]*$")]
 Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 BreakMode = Literal["manual", "automatic"]
-SessionType = Literal["Presentation", "Exercise", "Excursion", "Interactive"]
-
-
-@dataclass(frozen=True)
-class SessionRule:
-    minimum_minutes: int
-    splittable: bool
-    flexible: bool = False
-
-
-SESSION_RULES: dict[SessionType, SessionRule] = {
-    "Presentation": SessionRule(15, True),
-    "Exercise": SessionRule(15, True),
-    "Excursion": SessionRule(30, False),
-    "Interactive": SessionRule(15, False, flexible=True),
-}
 
 
 def issue(
@@ -59,13 +42,26 @@ def issue(
 class InputModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, loc_by_alias=True)
 
-    @field_validator("*", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def reject_null(cls, value: object) -> object:
-        if value is None:
-            raise PydanticCustomError(
-                "null_not_allowed", "Omit optional fields instead of using null"
-            )
+    def reject_null_fields(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        errors: list[InitErrorDetails] = []
+        for name, field in cls.model_fields.items():
+            alias = field.alias
+            input_name = alias if alias is not None and alias in value else name
+            if input_name in value and value[input_name] is None:
+                errors.append(
+                    issue(
+                        "null_not_allowed",
+                        "Omit optional fields instead of using null",
+                        (input_name,),
+                        None,
+                    )
+                )
+        if errors:
+            raise ValidationError.from_exception_data(cls.__name__, errors)
         return value
 
     @classmethod
@@ -171,56 +167,56 @@ class Session(InputModel):
         return value
 
 
-def validate_minimum_duration(session_type: SessionType, duration: Duration) -> None:
-    minimum = SESSION_RULES[session_type].minimum_minutes
-    if duration.minutes < minimum:
-        raise ValidationError.from_exception_data(
-            session_type,
-            [
-                issue(
-                    "duration_minimum",
-                    "{session_type} requires at least {minimum} minutes",
-                    ("duration",),
-                    duration,
-                    {"session_type": session_type, "minimum": minimum},
-                )
-            ],
-        )
+class FixedSession(Session):
+    duration: Duration
+    minimum_minutes: ClassVar[int] = 0
+    splittable: ClassVar[bool] = False
+
+    @model_validator(mode="after")
+    def check_minimum_duration(self) -> Self:
+        if self.duration.minutes < self.minimum_minutes:
+            raise ValidationError.from_exception_data(
+                type(self).__name__,
+                [
+                    issue(
+                        "duration_minimum",
+                        "{session_type} requires at least {minimum} minutes",
+                        ("duration",),
+                        self.duration,
+                        {
+                            "session_type": type(self).__name__,
+                            "minimum": self.minimum_minutes,
+                        },
+                    )
+                ],
+            )
+        return self
 
 
-class Presentation(Session):
+class Presentation(FixedSession):
     type: Literal["Presentation"]
-    duration: Duration
-
-    @model_validator(mode="after")
-    def minimum_duration(self) -> Self:
-        validate_minimum_duration("Presentation", self.duration)
-        return self
+    minimum_minutes: ClassVar[int] = 15
+    splittable: ClassVar[bool] = True
 
 
-class Exercise(Session):
+class Exercise(FixedSession):
     type: Literal["Exercise"]
-    duration: Duration
-
-    @model_validator(mode="after")
-    def minimum_duration(self) -> Self:
-        validate_minimum_duration("Exercise", self.duration)
-        return self
+    minimum_minutes: ClassVar[int] = 15
+    splittable: ClassVar[bool] = True
 
 
-class Excursion(Session):
+class Excursion(FixedSession):
     type: Literal["Excursion"]
-    duration: Duration
-
-    @model_validator(mode="after")
-    def minimum_duration(self) -> Self:
-        validate_minimum_duration("Excursion", self.duration)
-        return self
+    minimum_minutes: ClassVar[int] = 30
+    splittable: ClassVar[bool] = False
 
 
 class Interactive(Session):
     type: Literal["Interactive"]
     duration: Literal["remaining"]
+    minimum_minutes: ClassVar[int] = 15
+    splittable: ClassVar[bool] = False
+    flexible: ClassVar[bool] = True
 
 
 class Break(InputModel):
@@ -237,19 +233,30 @@ def entry_kind(value: object) -> str | None:
     if isinstance(value, dict):
         if "break" in value:
             return "break"
-        return value.get("type")
+        if "type" in value:
+            return "session"
+        return None
     if isinstance(value, Break):
         return "break"
-    return getattr(value, "type", None)
+    if isinstance(value, (Presentation, Exercise, Excursion, Interactive)):
+        return "session"
+    return None
 
+
+SessionEntry = Annotated[
+    Presentation | Exercise | Excursion | Interactive,
+    Field(discriminator="type"),
+]
 
 ScheduleEntry = Annotated[
-    Annotated[Break, Tag("break")]
-    | Annotated[Presentation, Tag("Presentation")]
-    | Annotated[Exercise, Tag("Exercise")]
-    | Annotated[Excursion, Tag("Excursion")]
-    | Annotated[Interactive, Tag("Interactive")],
-    Discriminator(entry_kind),
+    Annotated[Break, Tag("break")] | Annotated[SessionEntry, Tag("session")],
+    Discriminator(
+        entry_kind,
+        custom_error_type="schedule_entry_type",
+        custom_error_message=(
+            "Entry must be a break or a session with a recognized type"
+        ),
+    ),
 ]
 
 

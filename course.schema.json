@@ -104,16 +104,29 @@
                 "$ref": "#/$defs/Break"
               },
               {
-                "$ref": "#/$defs/Presentation"
-              },
-              {
-                "$ref": "#/$defs/Exercise"
-              },
-              {
-                "$ref": "#/$defs/Excursion"
-              },
-              {
-                "$ref": "#/$defs/Interactive"
+                "discriminator": {
+                  "mapping": {
+                    "Excursion": "#/$defs/Excursion",
+                    "Exercise": "#/$defs/Exercise",
+                    "Interactive": "#/$defs/Interactive",
+                    "Presentation": "#/$defs/Presentation"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Presentation"
+                  },
+                  {
+                    "$ref": "#/$defs/Exercise"
+                  },
+                  {
+                    "$ref": "#/$defs/Excursion"
+                  },
+                  {
+                    "$ref": "#/$defs/Interactive"
+                  }
+                ]
               }
             ]
           },
@@ -193,8 +206,8 @@
       "required": [
         "title",
         "trainers",
-        "type",
-        "duration"
+        "duration",
+        "type"
       ],
       "title": "Excursion",
       "type": "object"
@@ -230,8 +243,8 @@
       "required": [
         "title",
         "trainers",
-        "type",
-        "duration"
+        "duration",
+        "type"
       ],
       "title": "Exercise",
       "type": "object"
@@ -304,8 +317,8 @@
       "required": [
         "title",
         "trainers",
-        "type",
-        "duration"
+        "duration",
+        "type"
       ],
       "title": "Presentation",
       "type": "object"

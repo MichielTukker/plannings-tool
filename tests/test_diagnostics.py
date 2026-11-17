@@ -10,6 +10,11 @@ from plannings_tool.diagnostics import display_location
             ("days", 0, "schedule", 1, "Presentation", "duration"),
             "day 1|entry 2|duration",
         ),
+        (
+            ("days", 0, "schedule", 1, "session", "Presentation", "duration"),
+            "day 1|entry 2|duration",
+        ),
+        (("days", 0, "schedule", 1, "session"), "day 1|entry 2"),
         (("days", 1, "schedule", 2, "break", "duration"), "day 2|entry 3|duration"),
         (("days", 1, "schedule", 2, "break", "break"), "day 2|entry 3|break"),
         (("days", 0, "schedule", 2, "break"), "day 1|entry 3|break"),

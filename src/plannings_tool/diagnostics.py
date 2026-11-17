@@ -23,7 +23,7 @@ def format_path(location: Location) -> str:
 
 _COLLECTION_ITEMS = {"days": "day", "schedule": "entry", "trainers": "trainer"}
 _ENTRY_TAGS = frozenset(
-    {"break", "Presentation", "Exercise", "Excursion", "Interactive"}
+    {"break", "session", "Presentation", "Exercise", "Excursion", "Interactive"}
 )
 
 
@@ -38,13 +38,19 @@ def display_location(location: Location) -> str:
             else:
                 parts.append(str(part + 1))
             continue
-        # Pydantic inserts the union tag after an entry index; it adds no detail.
+        tag_start = position
+        while tag_start > 0 and location[tag_start - 1] in _ENTRY_TAGS:
+            tag_start -= 1
         follows_entry = (
-            position >= 2
-            and location[position - 2] == "schedule"
-            and isinstance(location[position - 1], int)
+            tag_start >= 2
+            and location[tag_start - 2] == "schedule"
+            and isinstance(location[tag_start - 1], int)
         )
-        if follows_entry and part in _ENTRY_TAGS and position + 1 < len(location):
+        if (
+            follows_entry
+            and part in _ENTRY_TAGS
+            and (position + 1 < len(location) or part == "session")
+        ):
             continue
         parts.append(part)
     return "|".join(parts)

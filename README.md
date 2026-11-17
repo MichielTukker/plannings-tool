@@ -208,6 +208,9 @@ Use `collect_validation_warnings(course)` to obtain advisory warning
 diagnostics separately after loading or parsing. The loading functions do not
 emit warnings themselves.
 
+`SessionEntry` is the exported type union for the four session variants;
+breaks are schedule entries, but are not session entries.
+
 ## Development
 
 ```powershell

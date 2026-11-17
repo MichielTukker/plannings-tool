@@ -4,7 +4,15 @@ from datetime import time
 import pytest
 from pydantic import ValidationError
 
-from plannings_tool.models import Break, CourseDefinition
+from plannings_tool.models import (
+    Break,
+    CourseDefinition,
+    Day,
+    Excursion,
+    Exercise,
+    Interactive,
+    Presentation,
+)
 
 
 def validate(definition):
@@ -172,6 +180,52 @@ def test_session_variants(definition, kind, duration, valid):
     else:
         with pytest.raises(ValidationError):
             validate(definition)
+
+
+def test_fixed_session_minimums_are_declared_on_types():
+    assert Presentation.minimum_minutes == 15
+    assert Presentation.splittable
+    assert Exercise.minimum_minutes == 15
+    assert Exercise.splittable
+    assert Excursion.minimum_minutes == 30
+    assert not Excursion.splittable
+    assert Interactive.minimum_minutes == 15
+    assert Interactive.flexible
+
+
+def test_schedule_entry_discriminator_errors_are_actionable(definition):
+    entry = definition["days"][0]["schedule"][0]
+    del entry["type"]
+    with pytest.raises(ValidationError) as caught:
+        validate(definition)
+    assert any(
+        error["type"] == "schedule_entry_type" and "break or a session" in error["msg"]
+        for error in caught.value.errors()
+    )
+
+    entry["type"] = "Unknown"
+    with pytest.raises(ValidationError) as caught:
+        validate(definition)
+    errors = caught.value.errors()
+    assert any(error["type"] == "union_tag_invalid" for error in errors)
+    assert all("entry_kind()" not in error["msg"] for error in errors)
+
+
+def test_schedule_entry_discriminator_accepts_existing_models(definition):
+    course = validate(definition)
+    day = course.days[0]
+    session = day.schedule[0]
+    parsed = Day.model_validate(
+        {
+            "label": day.label,
+            "schedule": [
+                Break.model_validate({"break": "coffee"}),
+                session,
+            ],
+        }
+    )
+    assert isinstance(parsed.schedule[0], Break)
+    assert isinstance(parsed.schedule[1], Presentation)
 
 
 def test_flexible_anywhere_and_at_most_one(definition):

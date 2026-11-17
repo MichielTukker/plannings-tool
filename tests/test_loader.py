@@ -12,6 +12,7 @@ from plannings_tool import (
     load_course,
     parse_course,
 )
+from plannings_tool.diagnostics import display_location
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -102,6 +103,7 @@ def test_model_error_locations(definition):
     assert issue.code == "duration_minimum"
     assert issue.location[:4] == ("days", 0, "schedule", 0)
     assert issue.location[-1] == "duration"
+    assert display_location(issue.location) == "day 1|entry 1|duration"
     assert "days[0].schedule[0]" in str(issue)
 
 

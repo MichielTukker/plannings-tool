@@ -11,9 +11,9 @@ Provide a local CLI backed by reusable Python functions. Keep input parsing,
 scheduling, and rendering separate so future email templates, action lists,
 requirement lists, and a web frontend can consume the same resolved schedule.
 
-Phases 1 and 2 are implemented: validation, JSON Schema export, manual-break
-scheduling, and the `plan schedule` preview. Phase 3 (automatic breaks) and
-phase 4 (rendering) are planned.
+Phases 1-3 are implemented: validation, JSON Schema export, manual and
+automatic-break scheduling, session splitting, and the `plan schedule`
+preview. Phase 4 (rendering) is planned.
 
 ## 1. Define the input contract
 
@@ -279,7 +279,7 @@ temporary files.
 |---|---|---|
 | 1 | Models, generated JSON Schema, updated example YAML, helpful validation errors | Done |
 | 2 | Typed date/time runtime values, optional timezone with Amsterdam default, DST validation, manual scheduling, flexible allocation, structured diagnostics | Done |
-| 3 | Automatic breaks, session splitting, deterministic placement, info diagnostics | Planned ([PHASE-3-PLAN.md](PHASE-3-PLAN.md)) |
+| 3 | Automatic breaks, session splitting, deterministic placement, info diagnostics | Done ([PHASE-3-PLAN.md](PHASE-3-PLAN.md)) |
 | 4 | PDF, per-day transparent Gantt PNGs, Markdown timetable, trainer colors/stripes, bundled logo, `plan render` | Planned ([PHASE-4-PLAN.md](PHASE-4-PLAN.md)) |
 | 5 | Documentation and end-to-end examples | Planned |
 

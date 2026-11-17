@@ -1,5 +1,7 @@
 # Phase 3: Automatic breaks and session splitting
 
+**Status: Implemented.**
+
 ## Outcome and boundaries
 
 Schedule days whose effective break mode is `automatic`. Insert coffee and

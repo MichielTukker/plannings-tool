@@ -1,5 +1,13 @@
 # Phase 2: Manual scheduling, fit diagnostics, and timezone-aware dates
 
+**Status: Implemented.**
+
+Manual scheduling, typed dates/times, timezone and DST validation, structured
+diagnostics, and the `plan schedule` preview with `--strict` are implemented.
+Automatic breaks and session splitting belong to
+[Phase 3](PHASE-3-PLAN.md); PDF, PNG, and Markdown rendering belong to
+[Phase 4](PHASE-4-PLAN.md), not unfinished Phase 2 work.
+
 ## Outcome and boundaries
 
 Turn validated course input into a renderer-independent, sequential schedule.
@@ -12,9 +20,9 @@ scheduling API. Use Typer for command arguments and subcommands throughout the
 CLI, including the phase-1 validation/schema commands.
 
 Phase 2 does not insert automatic breaks, split sessions, move or resize fixed
-sessions, render PDFs, or implement parallel tracks. A day configured for
-automatic breaks is valid input but cannot be scheduled until phase 3; fail with
-a clear `automatic_breaks_not_supported` scheduling error.
+sessions, render PDFs, or implement parallel tracks. Automatic scheduling was
+deferred to phase 3 and is now implemented there; see
+[PHASE-3-PLAN.md](PHASE-3-PLAN.md).
 
 ## Agreed behavior
 
@@ -89,10 +97,10 @@ When an Interactive session minimum generates overflow, use the specific
 generic overflow warning for the same excess. Still emit `unused_time` for
 positive unallocated time when there is no flexible session.
 
-Warnings do not prevent an otherwise schedulable result. Impossible conditions,
-invalid date/timezone resolution, and automatic mode in this phase produce
-explicit scheduling errors and no partial schedule. Input/schema problems
-continue to be reported by phase-1 validation.
+Warnings do not prevent an otherwise schedulable result. Impossible conditions
+and invalid date/timezone resolution produce explicit scheduling errors and no
+partial schedule. Input/schema problems continue to be reported by phase-1
+validation.
 
 ### Timezones and daylight saving
 
@@ -140,8 +148,9 @@ do not mutate `CourseDefinition`, add generated times back to YAML models, or
 make the PDF/web renderers recalculate scheduling semantics.
 
 Raise a dedicated `SchedulingError` carrying structured error diagnostics for
-automatic mode, unresolvable dated times, and other impossible scheduling
-conditions. Keep normal fit/missing-break conditions as warnings on the result.
+unresolvable dated times and other impossible scheduling conditions. Keep
+normal fit/missing-break conditions as warnings on the result. Phase 3 extends
+this to impossible automatic-break placements.
 `SchedulingError` and the phase-1 `CourseValidationError` share the
 `PlanningError` base and the `Diagnostic` type from `diagnostics.py`, so callers
 and the CLI handle input and scheduling failures the same way.
@@ -212,7 +221,8 @@ the Python API.
 
 ### 4. Sequential day scheduler
 
-- Reject effective automatic break mode before producing partial output.
+- At the phase-2 boundary, reject effective automatic break mode before
+  producing partial output; phase 3 replaces this with automatic placement.
 - Calculate each day's available elapsed duration.
 - Sum fixed-session and manual-break durations; determine Interactive remainder.
 - Assign sequential starts/ends at each original input position.
@@ -241,7 +251,7 @@ access.
 | Flexible duration | Interactive before, between, and after fixed entries; remainder includes manual breaks; exact 15-minute minimum; under-minimum/negative remainder produces 15 minutes and one overflow warning |
 | Fit diagnostics | Exact fit; fixed-only overflow; fixed-only unused time; no redundant generic overflow for Interactive minimum; manual missing-break warning inherited from phase 1 and threshold boundary |
 | Timezones | Normal dated day; nonexistent Amsterdam spring-forward time; ambiguous Amsterdam fall-back time; interval crossing offset change; valid explicit timezone; undated floating day has no aware instants |
-| Unsupported behavior | Effective automatic mode inherited from defaults and day override both fail with `automatic_breaks_not_supported`; no partial schedule |
+| Automatic scheduling | Deferred by Phase 2; see the completed Phase 3 plan and tests |
 | CLI | Preview content/order; warnings on stderr; normal warning exit is zero; strict warning exits nonzero and emits no preview; expected failures have no traceback |
 | Regression | Existing phase-1 YAML validation, schema determinism/export, and course/day input rules continue to pass |
 
@@ -261,5 +271,5 @@ both normal and strict CLI preview commands.
    locations.
 5. The text preview and strict mode behave as specified.
 6. Existing phase-1 functionality and the generated JSON Schema remain valid.
-7. Automatic break placement, split fragments, and PDF rendering are not
-   implemented in this phase.
+7. Automatic break placement and split fragments are implemented in phase 3;
+   PDF rendering remains out of scope for phase 2 (see phase 4).

@@ -104,6 +104,27 @@ def test_invalid_fields(definition, path, value):
 
 
 @pytest.mark.parametrize(
+    ("path", "value", "code", "message"),
+    [
+        (("course", "title"), " \n", "nonblank_syntax", "non-whitespace"),
+        (("trainers", 0, "id"), "Alex", "trainer_id_syntax", "lowercase"),
+        (("trainers", 0, "color"), "#fff", "color_syntax", "six-digit hex"),
+    ],
+)
+def test_pattern_errors_are_actionable(definition, path, value, code, message):
+    parent = definition
+    for key in path[:-1]:
+        parent = parent[key]
+    parent[path[-1]] = value
+    with pytest.raises(ValidationError) as caught:
+        validate(definition)
+    error = next(error for error in caught.value.errors() if error["type"] == code)
+    assert message in error["msg"]
+    assert "pattern" not in error["msg"]
+    assert r"\S" not in error["msg"]
+
+
+@pytest.mark.parametrize(
     "path",
     [(), ("course",), ("trainers", 0), ("days", 0), ("days", 0, "schedule", 0)],
 )

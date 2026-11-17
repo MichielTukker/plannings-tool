@@ -51,6 +51,8 @@ def test_invalid_example_reports_multiple_errors():
         "day 1|entry 2|duration",
     ):
         assert f"[ERROR] - invalid-course.yaml:{source} - " in result.stderr
+    assert "Invalid duration; use a value such as '15m' or '1h 15m'" in result.stderr
+    assert "String should match pattern" not in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -165,7 +167,12 @@ def test_schema_represents_input_contract():
     definitions = schema["$defs"]
     assert schema["additionalProperties"] is False
     assert schema["properties"]["schema_version"]["const"] == 1
+    assert definitions["Course"]["properties"]["title"]["pattern"] == r"\S"
     assert definitions["Presentation"]["properties"]["duration"]["type"] == "string"
+    assert (
+        definitions["Presentation"]["properties"]["duration"]["pattern"]
+        == r"^(?:[1-9][0-9]*m|[1-9][0-9]*h(?: [1-5]?[1-9]m| [1-5]0m)?)$"
+    )
     assert definitions["Interactive"]["properties"]["duration"]["const"] == "remaining"
     assert definitions["Break"]["required"] == ["break"]
     assert definitions["Day"]["properties"]["date"]["type"] == "string"
@@ -178,3 +185,9 @@ def test_schema_represents_input_contract():
         definitions["Course"]["properties"]["timezone"]["default"] == "Europe/Amsterdam"
     )
     assert definitions["Trainer"]["properties"]["email"]["format"] == "email"
+    assert (
+        definitions["Trainer"]["properties"]["id"]["pattern"] == r"^[a-z][a-z0-9_-]*$"
+    )
+    assert (
+        definitions["Trainer"]["properties"]["color"]["pattern"] == r"^#[0-9a-fA-F]{6}$"
+    )

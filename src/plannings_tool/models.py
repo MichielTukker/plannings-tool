@@ -1,7 +1,6 @@
 """Course input models; no timetable calculation takes place here."""
 
-import re
-from typing import Annotated, ClassVar, Literal, LiteralString, Self
+from typing import Annotated, Any, ClassVar, Literal, LiteralString, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from email_validator import EmailNotValidError, validate_email
@@ -13,17 +12,66 @@ from pydantic import (
     GetJsonSchemaHandler,
     Tag,
     ValidationError,
+    WithJsonSchema,
+    WrapValidator,
     field_validator,
     model_validator,
 )
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, InitErrorDetails, PydanticCustomError
+from pydantic_core.core_schema import ValidatorFunctionWrapHandler
 
 from .values import CalendarDate, ClockTime, Duration, minutes_since_midnight
 
-Nonblank = Annotated[str, Field(pattern=r"\S")]
-TrainerId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]*$")]
-Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
+
+def _friendly_pattern_error(
+    code: LiteralString, message: LiteralString
+) -> WrapValidator:
+    def validate(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+        try:
+            return handler(value)
+        except ValidationError as exc:
+            if any(
+                error["type"] == "string_pattern_mismatch" for error in exc.errors()
+            ):
+                raise PydanticCustomError(code, message) from exc
+            raise
+
+    return WrapValidator(validate)
+
+
+NONBLANK_PATTERN = r"\S"
+Nonblank = Annotated[
+    str,
+    Field(pattern=NONBLANK_PATTERN),
+    _friendly_pattern_error(
+        "nonblank_syntax", "Value must contain a non-whitespace character"
+    ),
+    WithJsonSchema({"type": "string", "pattern": NONBLANK_PATTERN}, mode="validation"),
+]
+
+TRAINER_ID_PATTERN = r"^[a-z][a-z0-9_-]*$"
+TrainerId = Annotated[
+    str,
+    Field(pattern=TRAINER_ID_PATTERN),
+    _friendly_pattern_error(
+        "trainer_id_syntax",
+        "Trainer ID must start with a lowercase letter and contain only lowercase "
+        "letters, digits, '_' or '-'",
+    ),
+    WithJsonSchema(
+        {"type": "string", "pattern": TRAINER_ID_PATTERN}, mode="validation"
+    ),
+]
+COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
+Color = Annotated[
+    str,
+    Field(pattern=COLOR_PATTERN),
+    _friendly_pattern_error(
+        "color_syntax", "Color must be a six-digit hex value, such as #336699"
+    ),
+    WithJsonSchema({"type": "string", "pattern": COLOR_PATTERN}, mode="validation"),
+]
 BreakMode = Literal["manual", "automatic"]
 
 
@@ -135,14 +183,6 @@ class Trainer(InputModel):
                 "Invalid email address: {reason}",
                 {"reason": str(exc)},
             ) from exc
-        return value
-
-    @field_validator("id", "color")
-    @classmethod
-    def exact_pattern(cls, value: str) -> str:
-        pattern = r"#[0-9a-fA-F]{6}" if value.startswith("#") else r"[a-z][a-z0-9_-]*"
-        if re.fullmatch(pattern, value) is None:
-            raise PydanticCustomError("value_syntax", "Invalid value syntax")
         return value
 
 

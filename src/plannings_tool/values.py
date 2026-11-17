@@ -2,10 +2,18 @@
 
 import re
 from datetime import date, time
-from typing import Annotated, ClassVar
+from typing import Annotated, Any, ClassVar, Self
 
-from pydantic import BeforeValidator, GetCoreSchemaHandler, WithJsonSchema
+from pydantic import (
+    BeforeValidator,
+    GetCoreSchemaHandler,
+    GetJsonSchemaHandler,
+    ValidationError,
+    WithJsonSchema,
+)
+from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, PydanticCustomError, core_schema
+from pydantic_core.core_schema import ValidatorFunctionWrapHandler
 
 DURATION_PATTERN = r"^(?:[1-9][0-9]*m|[1-9][0-9]*h(?: [1-5]?[1-9]m| [1-5]0m)?)$"
 TIME_PATTERN = r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
@@ -19,17 +27,30 @@ class StringValue(str):
     def __get_pydantic_core_schema__(
         cls, source: type, handler: GetCoreSchemaHandler
     ) -> CoreSchema:
-        return core_schema.no_info_after_validator_function(
+        return core_schema.no_info_wrap_validator_function(
             cls._validate,
             core_schema.str_schema(strict=True, pattern=cls.pattern),
         )
 
     @classmethod
-    def _validate(cls, value: str):
-        # A full match also rejects trailing newlines, unlike a regex '$' anchor.
-        if re.fullmatch(cls.pattern, value) is None:
-            raise PydanticCustomError("value_syntax", "Invalid value syntax")
-        return cls(value)
+    def _validate(cls, value: Any, handler: ValidatorFunctionWrapHandler) -> Self:
+        try:
+            return cls(handler(value))
+        except ValidationError as exc:
+            if any(
+                error["type"] == "string_pattern_mismatch" for error in exc.errors()
+            ):
+                raise PydanticCustomError(
+                    "duration_syntax",
+                    "Invalid duration; use a value such as '15m' or '1h 15m'",
+                ) from exc
+            raise
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        return {"type": "string", "pattern": cls.pattern}
 
 
 class Duration(StringValue):

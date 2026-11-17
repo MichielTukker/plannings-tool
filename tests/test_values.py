@@ -53,6 +53,15 @@ def test_invalid_duration(value):
         TypeAdapter(Duration).validate_python(value)
 
 
+def test_invalid_duration_message_hides_pattern():
+    with pytest.raises(ValidationError) as caught:
+        TypeAdapter(Duration).validate_python("1h 60m")
+    error = caught.value.errors()[0]
+    assert error["type"] == "duration_syntax"
+    assert "Invalid duration" in error["msg"]
+    assert "pattern" not in error["msg"]
+
+
 @pytest.mark.parametrize(
     ("value", "minutes"), [("00:00", 0), ("09:30", 570), ("23:59", 1439)]
 )

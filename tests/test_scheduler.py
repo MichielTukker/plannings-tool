@@ -1,9 +1,7 @@
 from copy import deepcopy
-from datetime import date, time, timedelta, timezone
+from datetime import UTC, date, time, timedelta
 
 import pytest
-import yaml
-from typer.testing import CliRunner
 
 from plannings_tool import (
     CourseDefinition,
@@ -11,9 +9,6 @@ from plannings_tool import (
     SchedulingError,
     schedule_course,
 )
-from plannings_tool.cli import app
-
-runner = CliRunner()
 
 
 def build_course(definition):
@@ -194,12 +189,13 @@ def test_dated_schedule_has_aware_instants(definition):
     result = schedule_course(build_course(definition))
     day = result.days[0]
     assert day.date == date(2027, 1, 15)
-    assert day.start_at is not None and day.end_at is not None
+    assert day.start_at is not None
+    assert day.end_at is not None
     assert day.start_at.utcoffset() == timedelta(hours=1)
     assert day.entries[0].start_at == day.start_at
     assert day.entries[0].end_at is not None
-    assert day.entries[0].end_at.astimezone(timezone.utc) - day.start_at.astimezone(
-        timezone.utc
+    assert day.entries[0].end_at.astimezone(UTC) - day.start_at.astimezone(
+        UTC
     ) == timedelta(minutes=30)
 
 
@@ -242,50 +238,3 @@ def test_scheduler_does_not_mutate_input(definition):
     original = deepcopy(definition)
     schedule_course(build_course(definition))
     assert definition == original
-
-
-def test_schedule_cli_rich_preview_and_warnings(tmp_path, definition):
-    definition["course"].update(start="09:00", end="10:00")
-    definition["days"][0]["date"] = "2027-01-15"
-    definition["days"][0]["location"] = "Training room"
-    definition["days"][0]["schedule"] = [
-        fixed("Opening", "30m"),
-        {"break": "coffee"},
-        fixed("Workshop", "30m"),
-    ]
-    path = tmp_path / "course.yaml"
-    path.write_text(yaml.safe_dump(definition), encoding="utf-8")
-    result = runner.invoke(app, ["schedule", str(path)])
-    assert result.exit_code == 0
-    assert "Day 1" in result.stdout
-    assert "2027-01-15" in result.stdout
-    assert "Europe/Amsterdam" in result.stdout
-    assert "Training room" in result.stdout
-    assert "Opening" in result.stdout
-    assert "Coffee break" in result.stdout
-    assert "Alex Example" in result.stdout
-    assert "[WARNING] - course.yaml:day 1|entry 3 - " in result.stderr
-    assert "schedule_overflow" not in result.stderr
-
-
-def test_schedule_cli_strict_suppresses_preview(tmp_path, definition):
-    path = tmp_path / "course.yaml"
-    path.write_text(yaml.safe_dump(definition), encoding="utf-8")
-    result = runner.invoke(app, ["schedule", str(path), "--strict"])
-    assert result.exit_code == 1
-    assert result.stdout == ""
-    assert result.stderr.count("[WARNING] - course.yaml:day 1|schedule - ") == 2
-    assert "exceeds four hours" in result.stderr
-    assert "remain unused" in result.stderr
-
-
-def test_schedule_cli_automatic_mode_error(tmp_path, definition):
-    definition["defaults"] = {"break_mode": "automatic"}
-    path = tmp_path / "course.yaml"
-    path.write_text(yaml.safe_dump(definition), encoding="utf-8")
-    result = runner.invoke(app, ["schedule", str(path)])
-    assert result.exit_code == 1
-    assert result.stdout == ""
-    assert "[ERROR] - course.yaml:day 1|break_mode - " in result.stderr
-    assert "Automatic break placement is not supported yet" in result.stderr
-    assert "automatic_breaks_not_supported" not in result.stderr

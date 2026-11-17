@@ -17,7 +17,7 @@ from .scheduler import (
     schedule_course,
 )
 from .schema import generate_schema
-from .validation import collect_validation_warnings
+from .validation import check_missing_manual_breaks
 
 __all__ = [
     "CourseDefinition",
@@ -30,7 +30,7 @@ __all__ = [
     "ScheduledEntry",
     "SchedulingError",
     "Severity",
-    "collect_validation_warnings",
+    "check_missing_manual_breaks",
     "generate_schema",
     "load_course",
     "main",

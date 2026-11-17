@@ -15,7 +15,7 @@ from .models import (
     Interactive,
     SessionEntry,
 )
-from .validation import collect_validation_warnings
+from .validation import check_missing_manual_breaks
 from .values import minutes_since_midnight
 
 ScheduledSource = Break | SessionEntry
@@ -101,7 +101,7 @@ class _DayWindow:
     available_minutes: int
 
 
-def _failure(code: str, message: str, location: Location) -> SchedulingError:
+def _scheduling_error(code: str, message: str, location: Location) -> SchedulingError:
     return SchedulingError(
         [
             Diagnostic(
@@ -114,14 +114,12 @@ def _failure(code: str, message: str, location: Location) -> SchedulingError:
     )
 
 
-def _resolve_local(
-    day_index: int,
-    field: Literal["start", "end"],
+def _localize_wall_time(
     local_date: date,
     local_time: time,
     zone: ZoneInfo,
+    location: Location,
 ) -> datetime:
-    location = ("days", day_index, field)
     naive = datetime.combine(local_date, local_time)
     candidates: dict[datetime, datetime] = {}
     for fold in (0, 1):
@@ -130,13 +128,13 @@ def _resolve_local(
         if instant.astimezone(zone).replace(tzinfo=None) == naive:
             candidates[instant] = candidate
     if not candidates:
-        raise _failure(
+        raise _scheduling_error(
             "nonexistent_local_time",
             f"{local_date} {local_time:%H:%M} does not exist in {zone.key}",
             location,
         )
     if len(candidates) > 1:
-        raise _failure(
+        raise _scheduling_error(
             "ambiguous_local_time",
             f"{local_date} {local_time:%H:%M} occurs twice in {zone.key}",
             location,
@@ -153,7 +151,7 @@ def _reject_offset_transition(
     day_index: int, start_at: datetime, end_at: datetime, zone: ZoneInfo
 ) -> None:
     if start_at.utcoffset() != end_at.utcoffset():
-        raise _failure(
+        raise _scheduling_error(
             "timezone_transition",
             f"Day interval crosses a timezone offset change in {zone.key}",
             ("days", day_index),
@@ -174,12 +172,14 @@ def _resolve_day_window(
             available_minutes=day.available_minutes(course.course),
         )
 
-    start_at = _resolve_local(day_index, "start", day.date, start_local, zone)
-    end_at = _resolve_local(day_index, "end", day.date, end_local, zone)
+    start_at = _localize_wall_time(
+        day.date, start_local, zone, ("days", day_index, "start")
+    )
+    end_at = _localize_wall_time(day.date, end_local, zone, ("days", day_index, "end"))
     _reject_offset_transition(day_index, start_at, end_at, zone)
     available = _available_minutes(start_at, end_at)
     if available <= 0:
-        raise _failure(
+        raise _scheduling_error(
             "invalid_day_interval",
             "Resolved day end must be later than its start",
             ("days", day_index, "end"),
@@ -193,7 +193,7 @@ def _resolve_day_window(
     )
 
 
-def _local_clock(start: time, offset_minutes: int) -> time:
+def _wall_clock_at(start: time, offset_minutes: int) -> time:
     minute_of_day = (minutes_since_midnight(start) + offset_minutes) % (24 * 60)
     return time(hour=minute_of_day // 60, minute=minute_of_day % 60)
 
@@ -310,12 +310,12 @@ def _build_scheduled_entries(
                 local_start=(
                     local_start_at.time()
                     if local_start_at is not None
-                    else _local_clock(window.start_local, start_offset)
+                    else _wall_clock_at(window.start_local, start_offset)
                 ),
                 local_end=(
                     local_end_at.time()
                     if local_end_at is not None
-                    else _local_clock(window.start_local, end_offset)
+                    else _wall_clock_at(window.start_local, end_offset)
                 ),
                 start_at=local_start_at,
                 end_at=local_end_at,
@@ -387,14 +387,14 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
     try:
         zone = ZoneInfo(course.course.timezone)
     except (ValueError, ZoneInfoNotFoundError) as exc:
-        raise _failure(
+        raise _scheduling_error(
             "timezone_unavailable",
             f"Timezone data is unavailable for {course.course.timezone}",
             ("course", "timezone"),
         ) from exc
 
     scheduled_days: list[ScheduledDay] = []
-    diagnostics = collect_validation_warnings(course)
+    diagnostics = check_missing_manual_breaks(course)
     errors: list[Diagnostic] = []
     for index, day in enumerate(course.days):
         try:

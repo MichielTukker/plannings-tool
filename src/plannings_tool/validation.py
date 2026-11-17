@@ -4,8 +4,8 @@ from .diagnostics import Diagnostic, Severity
 from .models import Break, CourseDefinition
 
 
-def collect_validation_warnings(course: CourseDefinition) -> list[Diagnostic]:
-    """Return advisory warnings without rejecting an otherwise valid course."""
+def check_missing_manual_breaks(course: CourseDefinition) -> list[Diagnostic]:
+    """Report long manual-mode days that have no scheduled breaks."""
     warnings: list[Diagnostic] = []
     for index, day in enumerate(course.days):
         if (

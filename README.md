@@ -204,9 +204,9 @@ types live in `plannings_tool.diagnostics`, which also provides
 `display_location()`. It renders a location such as `day 1|entry 3`, as the
 CLI does.
 
-Use `collect_validation_warnings(course)` to obtain advisory warning
-diagnostics separately after loading or parsing. The loading functions do not
-emit warnings themselves.
+Use `check_missing_manual_breaks(course)` to obtain advisory warning
+diagnostics for long manual-mode days without breaks, separately after loading
+or parsing. The loading functions do not emit warnings themselves.
 
 `SessionEntry` is the exported type union for the four session variants;
 breaks are schedule entries, but are not session entries.

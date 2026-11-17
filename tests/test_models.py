@@ -61,7 +61,7 @@ def test_course_timezone(definition, timezone_name, valid):
 
 
 @pytest.mark.parametrize("version", [True, False, "1", 1.0, 2, None])
-def test_strict_version(definition, version):
+def test_schema_version_must_be_strict(definition, version):
     definition["schema_version"] = version
     with pytest.raises(ValidationError):
         validate(definition)

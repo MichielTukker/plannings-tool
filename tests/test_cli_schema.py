@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from plannings_tool import Diagnostic, Severity, generate_schema
 from plannings_tool.cli import _print_diagnostic, app
-from plannings_tool.schema import schema_text, write_schema
+from plannings_tool.schema import render_schema, write_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 runner = CliRunner()
@@ -94,7 +94,7 @@ def test_schema_export_and_drift(tmp_path):
     assert result.stderr == ""
     assert "Schema written:" in result.stdout
     assert json.loads(path.read_text(encoding="utf-8")) == generate_schema()
-    assert path.read_text(encoding="utf-8") == schema_text()
+    assert path.read_text(encoding="utf-8") == render_schema()
     assert path.read_bytes() == (ROOT / "course.schema.json").read_bytes()
 
 

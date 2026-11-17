@@ -76,7 +76,7 @@ Color = Annotated[
 BreakMode = Literal["manual", "automatic"]
 
 
-def issue(
+def error_details(
     code: LiteralString,
     message: LiteralString,
     location: tuple[str | int, ...],
@@ -102,7 +102,7 @@ class InputModel(BaseModel):
             input_name = alias if alias is not None and alias in value else name
             if input_name in value and value[input_name] is None:
                 errors.append(
-                    issue(
+                    error_details(
                         "null_not_allowed",
                         "Omit optional fields instead of using null",
                         (input_name,),
@@ -142,7 +142,7 @@ class Course(InputModel):
 
     @field_validator("timezone")
     @classmethod
-    def valid_timezone(cls, value: str) -> str:
+    def check_timezone(cls, value: str) -> str:
         try:
             ZoneInfo(value)
         except (ValueError, ZoneInfoNotFoundError) as exc:
@@ -154,12 +154,12 @@ class Course(InputModel):
         return value
 
     @model_validator(mode="after")
-    def ordered_times(self) -> Self:
+    def check_time_order(self) -> Self:
         if self.start >= self.end:
             raise ValidationError.from_exception_data(
                 type(self).__name__,
                 [
-                    issue(
+                    error_details(
                         "time_order", "End must be later than start", ("end",), self.end
                     )
                 ],
@@ -175,7 +175,7 @@ class Trainer(InputModel):
 
     @field_validator("email")
     @classmethod
-    def valid_email(cls, value: str) -> str:
+    def check_email(cls, value: str) -> str:
         try:
             validate_email(value, check_deliverability=False)
         except EmailNotValidError as exc:
@@ -199,7 +199,7 @@ class Session(InputModel):
 
     @field_validator("trainers")
     @classmethod
-    def unique_trainers(cls, value: list[str]) -> list[str]:
+    def check_unique_trainers(cls, value: list[str]) -> list[str]:
         if len(set(value)) != len(value):
             raise PydanticCustomError(
                 "duplicate_trainer_reference",
@@ -219,7 +219,7 @@ class FixedSession(Session):
             raise ValidationError.from_exception_data(
                 type(self).__name__,
                 [
-                    issue(
+                    error_details(
                         "duration_minimum",
                         "{session_type} requires at least {minimum} minutes",
                         ("duration",),
@@ -334,7 +334,7 @@ class CourseDefinition(InputModel):
 
     @field_validator("schema_version", mode="before")
     @classmethod
-    def strict_version(cls, value: object) -> object:
+    def check_schema_version(cls, value: object) -> object:
         if type(value) is not int:
             raise PydanticCustomError(
                 "schema_version", "schema_version must be integer 1"
@@ -348,7 +348,7 @@ class CourseDefinition(InputModel):
         for index, trainer in enumerate(self.trainers):
             if trainer.id in trainer_ids:
                 errors.append(
-                    issue(
+                    error_details(
                         "duplicate_trainer_id",
                         "Trainer IDs must be unique",
                         ("trainers", index, "id"),
@@ -363,7 +363,7 @@ class CourseDefinition(InputModel):
             path = ("days", day_index)
             if day.label in labels:
                 errors.append(
-                    issue(
+                    error_details(
                         "duplicate_day_label",
                         "Day labels must be unique",
                         (*path, "label"),
@@ -374,7 +374,7 @@ class CourseDefinition(InputModel):
             if day.date is not None:
                 if previous_date is not None and day.date <= previous_date:
                     errors.append(
-                        issue(
+                        error_details(
                             "date_order",
                             "Supplied dates must be unique and strictly increasing",
                             (*path, "date"),
@@ -384,7 +384,7 @@ class CourseDefinition(InputModel):
                 previous_date = day.date
             if day.effective_start(self.course) >= day.effective_end(self.course):
                 errors.append(
-                    issue(
+                    error_details(
                         "time_order",
                         "Effective end must be later than effective start",
                         (*path, "end"),
@@ -397,7 +397,7 @@ class CourseDefinition(InputModel):
                 if isinstance(entry, Break):
                     if day.effective_break_mode(self.defaults) == "automatic":
                         errors.append(
-                            issue(
+                            error_details(
                                 "manual_break_in_automatic",
                                 "Manual breaks are not allowed in automatic mode",
                                 (*entry_path, "break"),
@@ -408,7 +408,7 @@ class CourseDefinition(InputModel):
                 if isinstance(entry, Interactive):
                     if interactive_seen:
                         errors.append(
-                            issue(
+                            error_details(
                                 "multiple_interactive",
                                 "At most one Interactive session is allowed per day",
                                 (*entry_path, "type"),
@@ -419,7 +419,7 @@ class CourseDefinition(InputModel):
                 for trainer_index, trainer_id in enumerate(entry.trainers):
                     if trainer_id not in trainer_ids:
                         errors.append(
-                            issue(
+                            error_details(
                                 "unknown_trainer",
                                 "Unknown trainer ID: {trainer_id}",
                                 (*entry_path, "trainers", trainer_index),

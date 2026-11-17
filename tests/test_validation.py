@@ -1,7 +1,7 @@
 import pytest
 import yaml
 
-from plannings_tool import Severity, collect_validation_warnings, parse_course
+from plannings_tool import Severity, check_missing_manual_breaks, parse_course
 
 
 @pytest.mark.parametrize(
@@ -28,7 +28,7 @@ def test_missing_manual_break_warning(
     if has_break:
         day["schedule"].append({"break": "coffee"})
     course = parse_course(yaml.safe_dump(definition))
-    warnings = collect_validation_warnings(course)
+    warnings = check_missing_manual_breaks(course)
     assert len(warnings) == int(expected)
     if expected:
         assert warnings[0].severity == Severity.WARNING
@@ -40,7 +40,7 @@ def test_missing_manual_break_warning(
 def test_missing_break_warning_uses_inherited_times(definition):
     definition["course"]["end"] = "13:00"
     course = parse_course(yaml.safe_dump(definition))
-    assert collect_validation_warnings(course) == []
+    assert check_missing_manual_breaks(course) == []
     definition["course"]["end"] = "13:01"
     course = parse_course(yaml.safe_dump(definition))
-    assert len(collect_validation_warnings(course)) == 1
+    assert len(check_missing_manual_breaks(course)) == 1

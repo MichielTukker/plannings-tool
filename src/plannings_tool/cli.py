@@ -21,7 +21,7 @@ from .scheduler import (
     schedule_course,
 )
 from .schema import write_schema
-from .validation import collect_validation_warnings
+from .validation import check_missing_manual_breaks
 
 app = typer.Typer(
     name="plan",
@@ -137,7 +137,7 @@ def validate(
         _print_diagnostics(error_console, course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    _print_diagnostics(error_console, course, collect_validation_warnings(definition))
+    _print_diagnostics(error_console, course, check_missing_manual_breaks(definition))
 
     success = Text()
     success.append("Valid course", style="bold green")

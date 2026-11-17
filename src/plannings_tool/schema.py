@@ -15,7 +15,7 @@ def generate_schema() -> dict:
     return schema
 
 
-def schema_text() -> str:
+def render_schema() -> str:
     return json.dumps(generate_schema(), indent=2, sort_keys=True) + "\n"
 
 
@@ -33,7 +33,7 @@ def write_schema(path: str | Path) -> None:
             delete=False,
         ) as stream:
             temporary = Path(stream.name)
-            stream.write(schema_text())
+            stream.write(render_schema())
         os.replace(temporary, destination)
     finally:
         if temporary is not None:

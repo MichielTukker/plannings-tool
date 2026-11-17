@@ -142,7 +142,9 @@ make the PDF/web renderers recalculate scheduling semantics.
 Raise a dedicated `SchedulingError` carrying structured error diagnostics for
 automatic mode, unresolvable dated times, and other impossible scheduling
 conditions. Keep normal fit/missing-break conditions as warnings on the result.
-Preserve the phase-1 `CourseValidationError` API for input errors.
+`SchedulingError` and the phase-1 `CourseValidationError` share the
+`PlanningError` base and the `Diagnostic` type from `diagnostics.py`, so callers
+and the CLI handle input and scheduling failures the same way.
 
 ### CLI
 
@@ -192,8 +194,9 @@ the Python API.
 ### 2. Scheduling and diagnostic result models
 
 - Add a scheduler module separate from models, YAML loading, and CLI rendering.
-- Define immutable scheduled-day, scheduled-entry, diagnostic, result, and
-  scheduling-error types.
+- Define immutable scheduled-day, scheduled-entry, and result types. Reuse the
+  shared `Diagnostic`, `Severity`, and `PlanningError` types from
+  `diagnostics.py` for warnings and scheduling errors.
 - Reuse `SESSION_RULES`, defaults, effective day properties, and existing
   validation warnings.
 - Define stable warning/error codes and path formatting once, not separately

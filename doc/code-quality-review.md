@@ -1,0 +1,36 @@
+# Code quality review (2026-11-17)
+
+Suggested order: 1 -> 2+3 -> 4+5 -> 7+8 -> 6 -> 10+11 -> 16 -> 9, 12-15.
+Rename functions while an item touches them; item 16 is the final pass over the names that remain.
+
+1. [DONE] Diagnostics/errors scattered. Fixed: new `diagnostics.py` holds `Severity` (StrEnum), a single frozen kw-only `Diagnostic` (severity, code, location, message, line, column), `Location`, `format_path`, `display_location`, `PlanningError(ValueError)` with a `diagnostics` tuple, and the `CourseValidationError`/`SchedulingError` subclasses. `ValidationIssue`, `ScheduleDiagnostic`, `.issues` and the scheduler's warning conversion were removed. The CLI catches `PlanningError` once and prints via `_print_diagnostic`; `SEVERITY_STYLES` is keyed by `Severity`. The `issue()` helper stays in models (Pydantic-specific) and `DuplicateKeyError` stays private in loader. README, PHASE-1-PLAN and PHASE-2-PLAN are updated; the `display_location` test moved to `tests/test_diagnostics.py`.
+   Original: ValidationIssue/CourseValidationError/display_location/_ENTRY_TAGS (loader), ScheduleDiagnostic/SchedulingError/_failure (scheduler), issue() (models), SEVERITY_STYLES (cli). Two near-identical diagnostic classes with duplicated __str__ path code; list vs tuple; scheduler converts one into the other.
+2. Session type names in ~7 places (SessionType, type literals, SESSION_RULES keys, Tag(...) strings, validate_minimum_duration args, loader _ENTRY_TAGS, scheduler ScheduledSource) + minimum_duration validator copied 3x. -> FixedSession base with duration + ClassVar minimum_minutes/splittable + one validator; leaves declare only type Literal + ClassVar overrides; delete SessionRule/SESSION_RULES/validate_minimum_duration/SessionType; export SessionEntry union once.
+3. entry_kind(): dict branch is the normal YAML path; Break-instance branch is the edge case (programmatic Day(schedule=[Break(...)])). Needed only because breaks use `break:` not `type:`. Leaks "entry_kind()" in messages. -> outer callable only break vs session; inner Field(discriminator="type") (native tags, JSON Schema discriminator mapping); custom_error_type/message; update display_location tag skipping; regenerate schema.
+4. Messages leak regex/internal names (Duration, Nonblank '\S', TrainerId, Color patterns via core str_schema pattern). -> BeforeValidator + WithJsonSchema friendly PydanticCustomError, pattern only in JSON Schema.
+5. Redundant fullmatch checks (StringValue._validate, Trainer.exact_pattern choosing pattern by startswith("#")); pydantic rust-regex already rejects trailing newline (verified). -> remove/fold into #4.
+6. Duration str subclass, .minutes reparses; Defaults Duration("15m") bypasses validation; StringValue has one subclass. -> parse to timedelta/int minutes, delete StringValue.
+7. collect_validation_warnings in loader (semantic rule in YAML layer); scheduler imports loader for it; duration calc duplicated. -> validation.py + Day.available_minutes helper.
+8. minutes_since_midnight used for comparisons; time compares natively. effective_start/end annotated ClockTime instead of time.
+9. __init__ imports cli.main (Typer/Rich on library import); stale docstring. -> script plannings_tool.cli:main.
+10. _make_scheduled_day ~130 lines; unreachable RuntimeError; _entry_identity 4-tuple; repeated astimezone; _check_no_offset_transition mixes check + available minutes, per-minute scan. -> split allocate/diagnose/build; compute instant once.
+11. ScheduledEntry duplicates source fields; CLI redundant row_title branch. -> properties from source.
+12. CLI: success messages bypass format; multiple Console(); tests import private _print_diagnostic. (SEVERITY_STYLES KeyError risk resolved by item 1.)
+13. Diagnostic codes bare strings -> StrEnum for owned codes.
+14. Tests: test_cli_schema mixes CLI/schema; scheduler CLI tests in test_scheduler -> test_cli.py/test_schema.py.
+15. Ruff rules minimal (add UP, SIM, RUF, PT, RET); pyproject description stale.
+
+16. Function names do not describe what the functions do. This list is not complete; add names as they are found.
+   - `collect_validation_warnings()` (loader, public API): the name is generic, but the body implements only one rule (a manual-mode day longer than 4h without breaks). -> Move the rule into its own function, e.g. `check_missing_manual_breaks(course)`. Keep a generic aggregator only if it calls the individual rules (fits item 7's `validation.py`). Update `__init__`, the CLI, the scheduler and the README.
+   - `_aware_at_offset()` (scheduler): returns the UTC instant `offset_minutes` after the day start, or `None` for undated days. It is used for both entry start and end times. -> `_utc_at_offset()` or `_utc_after(start_at, minutes)`. Item 10's "compute instant once" may remove it.
+   - `_source_duration()` (scheduler): returns the fixed duration in minutes, using the defaults for breaks. Its `0` return for Interactive hides a contract: callers already handle Interactive separately, so that branch is never reached. -> `_fixed_duration_minutes(entry, defaults)`, raising for Interactive; better, a duration method on the models.
+   - `_check_no_offset_transition()` (scheduler): the name suggests a check, but it also computes and returns the available minutes, and it scans every minute. -> Split into `_available_minutes(start_at, end_at)` and `_reject_offset_transition(...)` (DST check by comparing UTC offsets). Overlaps with item 10.
+   - `_resolve_local()` (scheduler): converts a dated local wall-clock time in the course timezone to an aware datetime. It rejects times that do not exist (spring-forward gap) or occur twice (fall-back overlap). `day_index`/`field` are only used to build the error location. -> `_localize_wall_time(local_date, local_time, zone, location)`.
+   - Also noticed:
+     - `_failure()` -> `_scheduling_error()`.
+     - `_entry_identity()` -> removed by item 11.
+     - `_make_scheduled_day()` -> `_schedule_day()` (item 10).
+     - `_local_clock()` -> `_wall_clock_at()`.
+     - `issue()` in models -> `error_details()`.
+     - `schema_text()` -> `render_schema()`.
+     - Pydantic validators named as adjectives/nouns (`valid_timezone`, `ordered_times`, `valid_email`, `exact_pattern`, `unique_trainers`, `minimum_duration`, `strict_version`, `reject_null`) -> verb form, e.g. `check_timezone`, `check_time_order`, `check_unique_trainers`.

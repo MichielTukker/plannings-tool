@@ -234,7 +234,8 @@ Use a small package structure:
 |---|---|
 | `models.py` | Input models, built-in types, field and cross-field validation |
 | `values.py` | Shared duration/time/date syntax and conversion helpers |
-| `loader.py` | Safe YAML loading, duplicate keys, file loading, diagnostics |
+| `diagnostics.py` | Shared `Diagnostic`/`Severity` types, location formatting, and the `PlanningError` hierarchy |
+| `loader.py` | Safe YAML loading, duplicate keys, file loading, validation warnings |
 | `schema.py` | Deterministic JSON Schema generation/export |
 | `cli.py` | Typer commands and Rich user-facing output |
 | `__init__.py` | Small public API exports and existing command entry-point compatibility |
@@ -267,7 +268,8 @@ Provide:
 - `parse_course(text) -> CourseDefinition`: validate YAML text without file I/O.
 - `generate_schema() -> dict`: obtain the editor schema.
 
-Use a domain validation exception containing a list of issues with stable codes,
+Use a domain validation exception (`CourseValidationError`, a `PlanningError`)
+whose `diagnostics` tuple holds `Diagnostic` values with stable codes,
 field locations, and readable messages. Include line/column information for YAML
 syntax and duplicate-key failures. For model errors, include day/schedule indexes
 and field paths; exact source-line mapping is not required in phase 1.

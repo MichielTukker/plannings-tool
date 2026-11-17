@@ -65,7 +65,13 @@ def test_manual_schedule_preserves_order_and_break_duration(definition):
         (entry.start_offset_minutes, entry.end_offset_minutes) for entry in day.entries
     ] == [(0, 30), (30, 45), (45, 75), (75, 180)]
     assert day.entries[1].title == "Coffee break"
+    assert day.entries[1].kind == "break"
     assert day.entries[1].break_kind == "coffee"
+    assert day.entries[1].trainer_ids == ()
+    assert day.entries[0].kind == "session"
+    assert day.entries[0].session_type == "Presentation"
+    assert day.entries[0].title == "First"
+    assert day.entries[0].trainer_ids == ("alex",)
     assert day.entries[-1].local_start == time(10, 15)
     assert day.entries[-1].local_end == time(12, 0)
     assert warning_codes(result) == []

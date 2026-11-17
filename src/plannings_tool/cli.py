@@ -111,12 +111,6 @@ def _print_schedule(
         table.add_column("Session / break")
         table.add_column("Trainers")
         for entry in day.entries:
-            if entry.kind == "break":
-                row_type = "Break"
-                row_title = entry.title
-            else:
-                row_type = entry.session_type or "Session"
-                row_title = entry.title
             names = ", ".join(
                 trainer_names[trainer_id] for trainer_id in entry.trainer_ids
             )
@@ -124,8 +118,8 @@ def _print_schedule(
                 Text(_entry_clock(day, entry, end=False)),
                 Text(_entry_clock(day, entry, end=True)),
                 Text(_format_duration(entry.duration_minutes)),
-                Text(row_type),
-                Text(row_title),
+                Text(entry.session_type or "Break"),
+                Text(entry.title),
                 Text(names or "-"),
             )
         console.print(table)

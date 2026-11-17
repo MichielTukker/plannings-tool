@@ -10,8 +10,9 @@ from .models import (
     Break,
     CourseDefinition,
     Day,
+    Defaults,
+    FixedSession,
     Interactive,
-    ScheduleEntry,
     SessionEntry,
 )
 from .validation import collect_validation_warnings
@@ -24,11 +25,6 @@ ScheduledSource = Break | SessionEntry
 class ScheduledEntry:
     schedule_index: int
     source: ScheduledSource
-    kind: Literal["session", "break"]
-    title: str
-    session_type: str | None
-    break_kind: str | None
-    trainer_ids: tuple[str, ...]
     duration_minutes: int
     start_offset_minutes: int
     end_offset_minutes: int
@@ -36,6 +32,34 @@ class ScheduledEntry:
     local_end: time
     start_at: datetime | None
     end_at: datetime | None
+
+    @property
+    def kind(self) -> Literal["session", "break"]:
+        return "break" if isinstance(self.source, Break) else "session"
+
+    @property
+    def title(self) -> str:
+        if isinstance(self.source, Break):
+            return f"{self.source.kind.title()} break"
+        return self.source.title
+
+    @property
+    def session_type(self) -> str | None:
+        if isinstance(self.source, Break):
+            return None
+        return self.source.type
+
+    @property
+    def break_kind(self) -> str | None:
+        if isinstance(self.source, Break):
+            return self.source.kind
+        return None
+
+    @property
+    def trainer_ids(self) -> tuple[str, ...]:
+        if isinstance(self.source, Break):
+            return ()
+        return tuple(self.source.trainers)
 
 
 @dataclass(frozen=True)
@@ -120,24 +144,20 @@ def _resolve_local(
     return next(iter(candidates.values()))
 
 
-def _check_no_offset_transition(
+def _available_minutes(start_at: datetime, end_at: datetime) -> int:
+    elapsed = end_at.astimezone(UTC) - start_at.astimezone(UTC)
+    return int(elapsed.total_seconds() // 60)
+
+
+def _reject_offset_transition(
     day_index: int, start_at: datetime, end_at: datetime, zone: ZoneInfo
-) -> int:
-    start_utc = start_at.astimezone(UTC)
-    end_utc = end_at.astimezone(UTC)
-    available = int((end_utc - start_utc).total_seconds() // 60)
-    starting_offset = start_utc.astimezone(zone).utcoffset()
-    for minute in range(1, available + 1):
-        current_offset = (
-            (start_utc + timedelta(minutes=minute)).astimezone(zone).utcoffset()
+) -> None:
+    if start_at.utcoffset() != end_at.utcoffset():
+        raise _failure(
+            "timezone_transition",
+            f"Day interval crosses a timezone offset change in {zone.key}",
+            ("days", day_index),
         )
-        if current_offset != starting_offset:
-            raise _failure(
-                "timezone_transition",
-                f"Day interval crosses a timezone offset change in {zone.key}",
-                ("days", day_index),
-            )
-    return available
 
 
 def _resolve_day_window(
@@ -156,7 +176,8 @@ def _resolve_day_window(
 
     start_at = _resolve_local(day_index, "start", day.date, start_local, zone)
     end_at = _resolve_local(day_index, "end", day.date, end_local, zone)
-    available = _check_no_offset_transition(day_index, start_at, end_at, zone)
+    _reject_offset_transition(day_index, start_at, end_at, zone)
+    available = _available_minutes(start_at, end_at)
     if available <= 0:
         raise _failure(
             "invalid_day_interval",
@@ -177,37 +198,17 @@ def _local_clock(start: time, offset_minutes: int) -> time:
     return time(hour=minute_of_day // 60, minute=minute_of_day % 60)
 
 
-def _source_duration(entry: ScheduleEntry, course: CourseDefinition) -> int:
+def _fixed_duration_minutes(entry: Break | FixedSession, defaults: Defaults) -> int:
     if isinstance(entry, Break):
-        return entry.effective_duration(course.defaults)
-    if isinstance(entry, Interactive):
-        return 0
+        return entry.effective_duration(defaults)
     return entry.duration
 
 
-def _entry_identity(
-    entry: ScheduleEntry,
-) -> tuple[Literal["session", "break"], str, str | None, tuple[str, ...]]:
-    if isinstance(entry, Break):
-        return "break", f"{entry.kind.title()} break", entry.kind, ()
-    return "session", entry.title, None, tuple(entry.trainers)
-
-
-def _aware_at_offset(start_at: datetime | None, offset_minutes: int) -> datetime | None:
-    if start_at is None:
-        return None
-    return start_at.astimezone(UTC) + timedelta(minutes=offset_minutes)
-
-
-def _make_scheduled_day(
-    course: CourseDefinition,
-    day_index: int,
-    day: Day,
-    zone: ZoneInfo,
-) -> tuple[ScheduledDay, list[Diagnostic]]:
-    window = _resolve_day_window(course, day_index, day, zone)
+def _allocate_durations(
+    day: Day, available_minutes: int, defaults: Defaults
+) -> tuple[int, list[int], int | None]:
     fixed_total = sum(
-        _source_duration(entry, course)
+        _fixed_duration_minutes(entry, defaults)
         for entry in day.schedule
         if not isinstance(entry, Interactive)
     )
@@ -219,18 +220,25 @@ def _make_scheduled_day(
         ),
         None,
     )
-    remaining = window.available_minutes - fixed_total
-    interactive_duration = max(15, remaining) if interactive_index is not None else None
+    remaining = available_minutes - fixed_total
+    durations = [
+        max(15, remaining)
+        if isinstance(entry, Interactive)
+        else _fixed_duration_minutes(entry, defaults)
+        for entry in day.schedule
+    ]
+    return fixed_total, durations, interactive_index
 
-    durations: list[int] = []
-    for entry in day.schedule:
-        if isinstance(entry, Interactive):
-            if interactive_duration is None:
-                raise RuntimeError("Interactive duration was not allocated")
-            durations.append(interactive_duration)
-        else:
-            durations.append(_source_duration(entry, course))
+
+def _allocation_diagnostics(
+    day_index: int,
+    available_minutes: int,
+    fixed_total: int,
+    durations: list[int],
+    interactive_index: int | None,
+) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
+    remaining = available_minutes - fixed_total
     if interactive_index is not None and remaining < 15:
         diagnostics.append(
             Diagnostic(
@@ -242,12 +250,12 @@ def _make_scheduled_day(
             )
         )
     elif interactive_index is None:
-        if fixed_total > window.available_minutes:
-            crossing_index = 0
+        if fixed_total > available_minutes:
             cursor = 0
+            crossing_index = 0
             for index, duration in enumerate(durations):
                 cursor += duration
-                if cursor > window.available_minutes:
+                if cursor > available_minutes:
                     crossing_index = index
                     break
             diagnostics.append(
@@ -256,61 +264,85 @@ def _make_scheduled_day(
                     code="schedule_overflow",
                     location=("days", day_index, "schedule", crossing_index),
                     message=f"Schedule exceeds the configured day by "
-                    f"{fixed_total - window.available_minutes} minutes",
+                    f"{fixed_total - available_minutes} minutes",
                 )
             )
-        elif fixed_total < window.available_minutes:
+        elif fixed_total < available_minutes:
             diagnostics.append(
                 Diagnostic(
                     severity=Severity.WARNING,
                     code="unused_time",
                     location=("days", day_index, "schedule"),
-                    message=f"{window.available_minutes - fixed_total} minutes "
-                    "remain unused",
+                    message=f"{available_minutes - fixed_total} minutes remain unused",
                 )
             )
+    return diagnostics
 
-    scheduled_entries: list[ScheduledEntry] = []
+
+def _build_scheduled_entries(
+    day: Day, durations: list[int], window: _DayWindow, zone: ZoneInfo
+) -> tuple[ScheduledEntry, ...]:
+    entries: list[ScheduledEntry] = []
     cursor = 0
+    start_utc = window.start_at.astimezone(UTC) if window.start_at is not None else None
     for index, (entry, duration) in enumerate(
         zip(day.schedule, durations, strict=True)
     ):
-        kind, title, break_kind, trainer_ids = _entry_identity(entry)
         start_offset = cursor
         end_offset = start_offset + duration
-        start_at_utc = _aware_at_offset(window.start_at, start_offset)
-        end_at_utc = _aware_at_offset(window.start_at, end_offset)
-        scheduled_entries.append(
+        start_at = (
+            start_utc + timedelta(minutes=start_offset)
+            if start_utc is not None
+            else None
+        )
+        end_at = (
+            start_utc + timedelta(minutes=end_offset) if start_utc is not None else None
+        )
+        local_start_at = start_at.astimezone(zone) if start_at is not None else None
+        local_end_at = end_at.astimezone(zone) if end_at is not None else None
+        entries.append(
             ScheduledEntry(
                 schedule_index=index,
                 source=entry,
-                kind=kind,
-                title=title,
-                session_type=None if isinstance(entry, Break) else entry.type,
-                break_kind=break_kind,
-                trainer_ids=trainer_ids,
                 duration_minutes=duration,
                 start_offset_minutes=start_offset,
                 end_offset_minutes=end_offset,
                 local_start=(
-                    start_at_utc.astimezone(zone).time()
-                    if start_at_utc is not None
+                    local_start_at.time()
+                    if local_start_at is not None
                     else _local_clock(window.start_local, start_offset)
                 ),
                 local_end=(
-                    end_at_utc.astimezone(zone).time()
-                    if end_at_utc is not None
+                    local_end_at.time()
+                    if local_end_at is not None
                     else _local_clock(window.start_local, end_offset)
                 ),
-                start_at=(
-                    start_at_utc.astimezone(zone) if start_at_utc is not None else None
-                ),
-                end_at=(
-                    end_at_utc.astimezone(zone) if end_at_utc is not None else None
-                ),
+                start_at=local_start_at,
+                end_at=local_end_at,
             )
         )
         cursor = end_offset
+    return tuple(entries)
+
+
+def _schedule_day(
+    course: CourseDefinition,
+    day_index: int,
+    day: Day,
+    zone: ZoneInfo,
+) -> tuple[ScheduledDay, list[Diagnostic]]:
+    window = _resolve_day_window(course, day_index, day, zone)
+    fixed_total, durations, interactive_index = _allocate_durations(
+        day, window.available_minutes, course.defaults
+    )
+    diagnostics = _allocation_diagnostics(
+        day_index,
+        window.available_minutes,
+        fixed_total,
+        durations,
+        interactive_index,
+    )
+    scheduled_entries = _build_scheduled_entries(day, durations, window, zone)
 
     return (
         ScheduledDay(
@@ -325,7 +357,7 @@ def _make_scheduled_day(
             start_at=window.start_at,
             end_at=window.end_at,
             available_minutes=window.available_minutes,
-            entries=tuple(scheduled_entries),
+            entries=scheduled_entries,
         ),
         diagnostics,
     )
@@ -366,9 +398,7 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
     errors: list[Diagnostic] = []
     for index, day in enumerate(course.days):
         try:
-            scheduled_day, day_diagnostics = _make_scheduled_day(
-                course, index, day, zone
-            )
+            scheduled_day, day_diagnostics = _schedule_day(course, index, day, zone)
         except SchedulingError as exc:
             errors.extend(exc.diagnostics)
             continue

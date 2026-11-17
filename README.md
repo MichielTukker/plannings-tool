@@ -1,9 +1,9 @@
 # plannings-tool
 
 A Python course-planning tool. Phases 1 and 2 provide YAML validation, JSON
-Schema export, and a sequential schedule preview with manually placed breaks.
-Automatic break insertion (phase 3) and PDF, per-day Gantt PNG, and Markdown
-timetable rendering (phase 4) are planned but not implemented yet.
+Schema export, and a sequential schedule preview. Phase 3 adds automatic
+breaks and session splitting. PDF, per-day Gantt PNG, and Markdown timetable
+rendering (phase 4) are planned but not implemented yet.
 
 ## Install and run
 
@@ -33,11 +33,11 @@ Exit codes are `0` for success, `1` for input/file errors, and `2` for invalid
 command-line arguments. Expected failures do not print tracebacks. Schema
 exports replace their destination atomically.
 
-`plan schedule` previews sequential timings with Rich tables. Scheduling
-warnings are printed on stderr and do not change the successful exit status;
-`--strict` treats warnings as failures and suppresses the preview. Automatic
-break scheduling is not implemented yet, so scheduling an automatic-mode day
-reports an error.
+`plan schedule` previews sequential timings with Rich tables. It supports both
+manual and automatic break modes; automatic breaks are placed at nearby session
+boundaries or split eligible sessions. Warnings and informational split/omission
+diagnostics are printed on stderr. Warnings do not change the successful exit
+status; `--strict` treats warnings as failures and suppresses the preview.
 
 Manual-mode days longer than four hours with no breaks produce a
 `missing_manual_breaks` warning on stderr, using inherited or overridden day
@@ -105,7 +105,7 @@ Trainer references must exist and must not repeat within one session. Trainers
 may teach multiple sessions; multiple trainers may share one session. Unused
 trainers are allowed.
 
-| Type | Duration | Minimum | Future break behavior |
+| Type | Duration | Minimum | Automatic-break behavior |
 |---|---|---:|---|
 | `Presentation` | Fixed | 15 min | Splittable |
 | `Exercise` | Fixed | 15 min | Splittable |
@@ -133,10 +133,18 @@ Only coffee and lunch are supported. Omitted durations use the corresponding
 default; overrides need only be positive. Breaks have no trainers. Repeated
 breaks, breaks at the start/end, and all-break days are valid.
 
-`automatic` break mode is accepted as input but rejects all manual break
-entries. Preferred break times/windows will be fixed in code in phase 3.
-The phase-2 scheduler does not place automatic breaks. It also reports overflow
-and unused time as warnings instead of changing fixed durations.
+`automatic` break mode rejects all manual break entries. It inserts morning
+coffee at 10:30 (±30 minutes), lunch at 12:15 (±15 minutes), and afternoon
+coffee at 15:00 (±30 minutes), using the configured default break durations.
+The nearest boundary between sessions is preferred. A `Presentation` or
+`Exercise` may be split when no boundary fits; each fragment is at least
+15 minutes. A break is omitted with an info diagnostic when provisional
+activities end by its preferred start; omitted breaks stay omitted after
+Interactive time is reallocated. An impossible placement is a scheduling
+error. See [PHASE-3-PLAN.md](doc/PHASE-3-PLAN.md) for the full rules.
+
+Automatic scheduling does not move or resize fixed sessions. It reports
+overflow and unused time as warnings.
 
 Dated days resolve local wall-clock times in the course timezone. Nonexistent
 and ambiguous daylight-saving times, and days crossing an offset transition,
@@ -200,7 +208,8 @@ All reported problems share one `Diagnostic` type. It has:
 - `line` and `column`: set for YAML syntax and duplicate-key errors.
 
 `CourseValidationError` and `SchedulingError` both derive from `PlanningError`.
-Catch `PlanningError` to handle either one through its `diagnostics`. These
+Catch `PlanningError` to handle either one through its `diagnostics`. Schedule
+results expose warning-only `warnings` and informational `infos`. These
 types live in `plannings_tool.diagnostics`, which also provides
 `display_location()`. It renders a location such as `day 1|entry 3`, as the
 CLI does.
@@ -222,9 +231,11 @@ uv run ruff format --check .
 uv run ty check
 ```
 
-`schedule_course` returns a `ScheduleResult`. It holds ordered day/entry data
-and `Diagnostic` warnings. It raises `SchedulingError` for unsupported
-automatic breaks and timezone resolution failures.
+`schedule_course` returns a `ScheduleResult`. Scheduled fragments retain their
+source session and schedule index and expose `part`, `parts`, and `part_label`;
+automatically inserted breaks have `schedule_index is None` and
+`is_automatic=True`. It raises `SchedulingError` for impossible break
+placements and timezone resolution failures.
 
 Tests check that the committed schema matches model generation. See
 [IMPLEMENTATION-PLAN.md](doc/IMPLEMENTATION-PLAN.md),

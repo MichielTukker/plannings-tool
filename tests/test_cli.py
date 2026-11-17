@@ -170,13 +170,44 @@ def test_schedule_cli_strict_suppresses_preview(tmp_path, definition):
     assert "remain unused" in result.stderr
 
 
-def test_schedule_cli_automatic_mode_error(tmp_path, definition):
-    definition["defaults"] = {"break_mode": "automatic"}
+def test_schedule_cli_automatic_preview_and_infos():
+    path = ROOT / "testdata" / "Kleppen_auto_breaks.yaml"
+    result = runner.invoke(app, ["schedule", str(path)])
+    assert result.exit_code == 0
+    assert "part" in result.stdout
+    assert "1/2" in result.stdout
+    assert "Coffee break" in result.stdout
+    assert "[INFO] - Kleppen_auto_breaks.yaml:day 2|entry 3 - " in result.stderr
+    assert "[WARNING] - Kleppen_auto_breaks.yaml:day 2|entry 6 - " in result.stderr
+
+
+def test_schedule_cli_strict_ignores_info_diagnostics(tmp_path, definition):
+    definition["course"].update(start="11:00", end="17:00")
+    definition["defaults"] = {
+        "break_mode": "automatic",
+        "coffee_break": "5h",
+    }
+    definition["days"][0].update(
+        start="11:00",
+        end="17:00",
+        schedule=[
+            {
+                "title": "Long session",
+                "type": "Presentation",
+                "duration": "2h 30m",
+                "trainers": ["alex"],
+            },
+            {
+                "title": "Discussion",
+                "type": "Interactive",
+                "duration": "remaining",
+                "trainers": ["sam"],
+            },
+        ],
+    )
     path = tmp_path / "course.yaml"
     path.write_text(yaml.safe_dump(definition), encoding="utf-8")
-    result = runner.invoke(app, ["schedule", str(path)])
-    assert result.exit_code == 1
-    assert result.stdout == ""
-    assert "[ERROR] - course.yaml:day 1|break_mode - " in result.stderr
-    assert "Automatic break placement is not supported yet" in result.stderr
-    assert "automatic_breaks_not_supported" not in result.stderr
+    result = runner.invoke(app, ["schedule", str(path), "--strict"])
+    assert result.exit_code == 0
+    assert "Discussion" in result.stdout
+    assert "[INFO] - course.yaml:day 1 - " in result.stderr

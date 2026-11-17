@@ -15,7 +15,8 @@ class Severity(StrEnum):
 
 class DiagnosticCode(StrEnum):
     AMBIGUOUS_LOCAL_TIME = "ambiguous_local_time"
-    AUTOMATIC_BREAKS_NOT_SUPPORTED = "automatic_breaks_not_supported"
+    AUTOMATIC_BREAK_OMITTED = "automatic_break_omitted"
+    AUTOMATIC_BREAK_PLACEMENT = "automatic_break_placement"
     CALENDAR_DATE = "calendar_date"
     COLOR_SYNTAX = "color_syntax"
     DATE_ORDER = "date_order"
@@ -41,6 +42,7 @@ class DiagnosticCode(StrEnum):
     SCHEMA_VERSION = "schema_version"
     SCHEMA_WRITTEN = "schema_written"
     SCHEMA_WRITE = "schema_write"
+    SESSION_SPLIT = "session_split"
     TIME_ORDER = "time_order"
     TIMEZONE_NAME = "timezone_name"
     TIMEZONE_TRANSITION = "timezone_transition"

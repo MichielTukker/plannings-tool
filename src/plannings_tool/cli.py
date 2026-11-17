@@ -127,12 +127,15 @@ def _print_schedule(
             names = ", ".join(
                 trainer_names[trainer_id] for trainer_id in entry.trainer_ids
             )
+            title = entry.title
+            if entry.part_label is not None:
+                title = f"{title} ({entry.part_label})"
             table.add_row(
                 Text(_entry_clock(day, entry, end=False)),
                 Text(_entry_clock(day, entry, end=True)),
                 Text(_format_duration(entry.duration_minutes)),
                 Text(entry.session_type or "Break"),
-                Text(entry.title),
+                Text(title),
                 Text(names or "-"),
             )
         console.print(table)
@@ -166,7 +169,7 @@ def validate(
     )
 
 
-@app.command(help="Schedule a course with its manually placed breaks.")
+@app.command(help="Schedule a course with manual or automatic breaks.")
 def schedule(
     context: typer.Context,
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
@@ -184,7 +187,7 @@ def schedule(
         _print_diagnostics(error_console, course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    _print_diagnostics(error_console, course, result.warnings)
+    _print_diagnostics(error_console, course, result.diagnostics)
     if strict and result.warnings:
         raise typer.Exit(code=1)
     _print_schedule(console, result, definition)

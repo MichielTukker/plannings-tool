@@ -170,20 +170,6 @@ def test_repeated_and_edge_breaks_are_scheduled_in_place(definition):
     assert warning_codes(result) == ["unused_time"]
 
 
-@pytest.mark.parametrize(
-    ("default_mode", "day_mode"),
-    [("automatic", None), ("manual", "automatic")],
-)
-def test_automatic_mode_is_not_scheduled(definition, default_mode, day_mode):
-    definition["defaults"] = {"break_mode": default_mode}
-    if day_mode is not None:
-        definition["days"][0]["break_mode"] = day_mode
-    with pytest.raises(SchedulingError) as caught:
-        schedule_course(build_course(definition))
-    assert caught.value.diagnostics[0].code == "automatic_breaks_not_supported"
-    assert caught.value.diagnostics[0].location == ("days", 0, "break_mode")
-
-
 def test_dated_schedule_has_aware_instants(definition):
     definition["days"][0]["date"] = "2027-01-15"
     result = schedule_course(build_course(definition))

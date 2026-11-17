@@ -11,7 +11,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .diagnostics import Diagnostic, PlanningError, Severity, display_location
+from .diagnostics import (
+    Diagnostic,
+    DiagnosticCode,
+    PlanningError,
+    Severity,
+    display_location,
+)
 from .loader import load_course
 from .models import CourseDefinition
 from .scheduler import (
@@ -37,6 +43,13 @@ SEVERITY_STYLES = {
     Severity.WARNING: "bold orange1",
     Severity.INFO: "bold green",
 }
+
+
+def _console(context: typer.Context, *, stderr: bool = False) -> Console:
+    return Console(
+        stderr=stderr,
+        force_terminal=context.color,
+    )
 
 
 def _print_diagnostic(console: Console, path: Path, diagnostic: Diagnostic) -> None:
@@ -127,10 +140,12 @@ def _print_schedule(
 
 @app.command(help="Validate a course YAML file.")
 def validate(
+    context: typer.Context,
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
 ) -> None:
     """Validate a course definition and report advisory warnings."""
-    error_console = Console(stderr=True)
+    console = _console(context)
+    error_console = _console(context, stderr=True)
     try:
         definition = load_course(course)
     except PlanningError as exc:
@@ -139,21 +154,29 @@ def validate(
 
     _print_diagnostics(error_console, course, check_missing_manual_breaks(definition))
 
-    success = Text()
-    success.append("Valid course", style="bold green")
-    success.append(f": {course}", style="cyan")
-    Console().print(success)
+    _print_diagnostic(
+        console,
+        course,
+        Diagnostic(
+            severity=Severity.INFO,
+            code=DiagnosticCode.VALID_COURSE,
+            location=(),
+            message="Valid course",
+        ),
+    )
 
 
 @app.command(help="Schedule a course with its manually placed breaks.")
 def schedule(
+    context: typer.Context,
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
     strict: Annotated[
         bool, typer.Option("--strict", help="Treat scheduling warnings as failures")
     ] = False,
 ) -> None:
     """Build and display a sequential schedule preview."""
-    error_console = Console(stderr=True)
+    console = _console(context)
+    error_console = _console(context, stderr=True)
     try:
         definition = load_course(course)
         result = schedule_course(definition)
@@ -164,18 +187,20 @@ def schedule(
     _print_diagnostics(error_console, course, result.warnings)
     if strict and result.warnings:
         raise typer.Exit(code=1)
-    _print_schedule(Console(), result, definition)
+    _print_schedule(console, result, definition)
 
 
 @app.command(help="Export the editor JSON Schema.")
 def schema(
+    context: typer.Context,
     output: Annotated[
         Path,
         typer.Option("--output", help="Destination JSON file", show_default=False),
     ],
 ) -> None:
     """Write the generated JSON Schema atomically."""
-    error_console = Console(stderr=True)
+    console = _console(context)
+    error_console = _console(context, stderr=True)
     try:
         write_schema(output)
     except OSError as exc:
@@ -184,17 +209,23 @@ def schema(
             output,
             Diagnostic(
                 severity=Severity.ERROR,
-                code="schema_write",
+                code=DiagnosticCode.SCHEMA_WRITE,
                 location=(),
                 message=f"Cannot write schema: {exc}",
             ),
         )
         raise typer.Exit(code=1) from exc
 
-    message = Text()
-    message.append("Schema written", style="bold green")
-    message.append(f": {output}", style="cyan")
-    Console().print(message)
+    _print_diagnostic(
+        console,
+        output,
+        Diagnostic(
+            severity=Severity.INFO,
+            code=DiagnosticCode.SCHEMA_WRITTEN,
+            location=(),
+            message="Schema written",
+        ),
+    )
 
 
 def main() -> None:

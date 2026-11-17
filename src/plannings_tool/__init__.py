@@ -1,4 +1,4 @@
-"""Public course validation API."""
+"""Public course planning and scheduling API."""
 
 from .diagnostics import (
     CourseValidationError,
@@ -26,10 +26,10 @@ __all__ = [
     "DiagnosticCode",
     "PlanningError",
     "ScheduleResult",
-    "SessionEntry",
     "ScheduledDay",
     "ScheduledEntry",
     "SchedulingError",
+    "SessionEntry",
     "Severity",
     "check_missing_manual_breaks",
     "generate_schema",

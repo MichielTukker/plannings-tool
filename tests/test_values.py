@@ -20,7 +20,7 @@ from plannings_tool.values import CalendarDate, ClockTime, Duration
     ],
 )
 def test_duration_conversion(text, minutes):
-    assert TypeAdapter(Duration).validate_python(text).minutes == minutes
+    assert TypeAdapter(Duration).validate_python(text) == minutes
 
 
 @pytest.mark.parametrize(

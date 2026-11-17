@@ -188,8 +188,8 @@ class Trainer(InputModel):
 
 
 class Defaults(InputModel):
-    coffee_break: Duration = Duration("15m")
-    lunch: Duration = Duration("45m")
+    coffee_break: Duration = Field(15, json_schema_extra={"default": "15m"})
+    lunch: Duration = Field(45, json_schema_extra={"default": "45m"})
     break_mode: BreakMode = "manual"
 
 
@@ -215,7 +215,7 @@ class FixedSession(Session):
 
     @model_validator(mode="after")
     def check_minimum_duration(self) -> Self:
-        if self.duration.minutes < self.minimum_minutes:
+        if self.duration < self.minimum_minutes:
             raise ValidationError.from_exception_data(
                 type(self).__name__,
                 [
@@ -264,7 +264,7 @@ class Break(InputModel):
     kind: Literal["coffee", "lunch"] = Field(alias="break")
     duration: Duration | None = None
 
-    def effective_duration(self, defaults: Defaults) -> Duration:
+    def effective_duration(self, defaults: Defaults) -> int:
         if self.duration is not None:
             return self.duration
         return defaults.coffee_break if self.kind == "coffee" else defaults.lunch

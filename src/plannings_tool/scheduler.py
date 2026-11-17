@@ -179,10 +179,10 @@ def _local_clock(start: time, offset_minutes: int) -> time:
 
 def _source_duration(entry: ScheduleEntry, course: CourseDefinition) -> int:
     if isinstance(entry, Break):
-        return entry.effective_duration(course.defaults).minutes
+        return entry.effective_duration(course.defaults)
     if isinstance(entry, Interactive):
         return 0
-    return entry.duration.minutes
+    return entry.duration
 
 
 def _entry_identity(

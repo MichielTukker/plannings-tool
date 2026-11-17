@@ -32,8 +32,8 @@ def test_defaults_and_independent_inheritance(definition):
     definition["days"][0]["end"] = "16:00"
     result = validate(definition)
     day = result.days[0]
-    assert result.defaults.coffee_break.minutes == 15
-    assert result.defaults.lunch.minutes == 45
+    assert result.defaults.coffee_break == 15
+    assert result.defaults.lunch == 45
     assert day.effective_start(result.course) == time(9, 0)
     assert day.effective_end(result.course) == time(16, 0)
     assert day.effective_break_mode(result.defaults) == "manual"
@@ -322,7 +322,7 @@ def test_break_defaults_overrides_and_all_break_day(definition):
     result = validate(definition)
     breaks = result.days[0].schedule
     assert all(isinstance(entry, Break) for entry in breaks)
-    assert [entry.effective_duration(result.defaults).minutes for entry in breaks] == [
+    assert [entry.effective_duration(result.defaults) for entry in breaks] == [
         20,
         30,
         20,

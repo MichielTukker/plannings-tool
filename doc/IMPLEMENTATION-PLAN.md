@@ -45,7 +45,7 @@ value is a string but cannot reliably enumerate installed IANA timezone names.
 Keep dates and wall-clock times as quoted ISO strings in YAML and in the editor
 schema. Parse them into typed `datetime.date` and `datetime.time` values in the
 Python input model instead of keeping `StringValue` subclasses as the runtime
-representation. Durations remain elapsed-minute values. Resolve a dated day's
+representation. Durations are parsed into whole elapsed-minute integers. Resolve a dated day's
 local start/end using `zoneinfo.ZoneInfo(course.timezone)` into timezone-aware
 datetimes at the scheduling boundary. Undated days remain floating local-clock
 schedules: they can be validated and scheduled using wall-clock values, but

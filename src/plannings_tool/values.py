@@ -2,66 +2,26 @@
 
 import re
 from datetime import date, time
-from typing import Annotated, Any, ClassVar, Self
+from typing import Annotated
 
-from pydantic import (
-    BeforeValidator,
-    GetCoreSchemaHandler,
-    GetJsonSchemaHandler,
-    ValidationError,
-    WithJsonSchema,
-)
-from pydantic.json_schema import JsonSchemaValue
-from pydantic_core import CoreSchema, PydanticCustomError, core_schema
-from pydantic_core.core_schema import ValidatorFunctionWrapHandler
+from pydantic import BeforeValidator, WithJsonSchema
+from pydantic_core import PydanticCustomError
 
 DURATION_PATTERN = r"^(?:[1-9][0-9]*m|[1-9][0-9]*h(?: [1-5]?[1-9]m| [1-5]0m)?)$"
 TIME_PATTERN = r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
 DATE_PATTERN = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 
 
-class StringValue(str):
-    pattern: ClassVar[str]
-
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls, source: type, handler: GetCoreSchemaHandler
-    ) -> CoreSchema:
-        return core_schema.no_info_wrap_validator_function(
-            cls._validate,
-            core_schema.str_schema(strict=True, pattern=cls.pattern),
+def parse_duration_minutes(value: object) -> int:
+    if not isinstance(value, str) or re.fullmatch(DURATION_PATTERN, value) is None:
+        raise PydanticCustomError(
+            "duration_syntax",
+            "Invalid duration; use a value such as '15m' or '1h 15m'",
         )
-
-    @classmethod
-    def _validate(cls, value: Any, handler: ValidatorFunctionWrapHandler) -> Self:
-        try:
-            return cls(handler(value))
-        except ValidationError as exc:
-            if any(
-                error["type"] == "string_pattern_mismatch" for error in exc.errors()
-            ):
-                raise PydanticCustomError(
-                    "duration_syntax",
-                    "Invalid duration; use a value such as '15m' or '1h 15m'",
-                ) from exc
-            raise
-
-    @classmethod
-    def __get_pydantic_json_schema__(
-        cls, schema: CoreSchema, handler: GetJsonSchemaHandler
-    ) -> JsonSchemaValue:
-        return {"type": "string", "pattern": cls.pattern}
-
-
-class Duration(StringValue):
-    pattern = DURATION_PATTERN
-
-    @property
-    def minutes(self) -> int:
-        total = 0
-        for component in self.split(" "):
-            total += int(component[:-1]) * (60 if component.endswith("h") else 1)
-        return total
+    total = 0
+    for component in value.split(" "):
+        total += int(component[:-1]) * (60 if component.endswith("h") else 1)
+    return total
 
 
 def parse_clock_time(value: object) -> time:
@@ -82,6 +42,12 @@ def parse_calendar_date(value: object) -> date:
         ) from exc
 
 
+Duration = Annotated[
+    int,
+    BeforeValidator(parse_duration_minutes),
+    WithJsonSchema({"type": "string", "pattern": DURATION_PATTERN}, mode="validation"),
+]
+"""Elapsed whole minutes, written in YAML as e.g. ``15m`` or ``1h 15m``."""
 ClockTime = Annotated[
     time,
     BeforeValidator(parse_clock_time),

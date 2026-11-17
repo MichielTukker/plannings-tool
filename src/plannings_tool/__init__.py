@@ -1,6 +1,5 @@
 """Public course validation API."""
 
-from .cli import main
 from .diagnostics import (
     CourseValidationError,
     Diagnostic,
@@ -33,7 +32,6 @@ __all__ = [
     "check_missing_manual_breaks",
     "generate_schema",
     "load_course",
-    "main",
     "parse_course",
     "schedule_course",
 ]

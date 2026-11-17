@@ -303,6 +303,15 @@ def test_invalid_effective_times(definition, target, overrides, location):
     assert_error(definition, "time_order", location)
 
 
+def test_available_minutes_uses_effective_times(definition):
+    course = validate(definition)
+    assert course.days[0].available_minutes(course.course) == 8 * 60
+
+    definition["course"]["end"] = "13:00"
+    course = validate(definition)
+    assert course.days[0].available_minutes(course.course) == 4 * 60
+
+
 def test_break_defaults_overrides_and_all_break_day(definition):
     definition["defaults"] = {"coffee_break": "20m"}
     definition["days"][0]["schedule"] = [

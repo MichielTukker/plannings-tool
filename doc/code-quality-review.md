@@ -1,6 +1,6 @@
 # Code quality review (2026-11-17)
 
-Suggested order: 1 [DONE] -> 2+3 [DONE] -> 4+5 [DONE] -> 7+8 -> 6 -> 10+11 -> 16 -> 9, 12-15.
+Suggested order: 1 [DONE] -> 2+3 [DONE] -> 4+5 [DONE] -> 7+8 [DONE] -> 6 -> 10+11 -> 16 -> 9, 12-15.
 Rename functions while an item touches them; item 16 is the final pass over the names that remain.
 
 1. [DONE] Diagnostics/errors scattered. Fixed: new `diagnostics.py` holds `Severity` (StrEnum), a single frozen kw-only `Diagnostic` (severity, code, location, message, line, column), `Location`, `format_path`, `display_location`, `PlanningError(ValueError)` with a `diagnostics` tuple, and the `CourseValidationError`/`SchedulingError` subclasses. `ValidationIssue`, `ScheduleDiagnostic`, `.issues` and the scheduler's warning conversion were removed. The CLI catches `PlanningError` once and prints via `_print_diagnostic`; `SEVERITY_STYLES` is keyed by `Severity`. The `issue()` helper stays in models (Pydantic-specific) and `DuplicateKeyError` stays private in loader. README, PHASE-1-PLAN and PHASE-2-PLAN are updated; the `display_location` test moved to `tests/test_diagnostics.py`.
@@ -10,8 +10,8 @@ Rename functions while an item touches them; item 16 is the final pass over the 
 4. [DONE] Pattern errors leaked regexes for Duration, Nonblank, TrainerId, and Color. Native Pydantic pattern validation now has wrap validators that translate mismatch errors to field-specific `PydanticCustomError` messages; `WithJsonSchema` preserves the editor patterns. Duration keeps its string representation and pattern in generated JSON Schema. Wrap validators are used rather than `BeforeValidator` because they can translate native regex failures without reimplementing regex checks.
 5. [DONE] Removed duplicate Python `re.fullmatch` checks from `StringValue._validate` and `Trainer.exact_pattern`. Pydantic's native Rust-regex validation now enforces the patterns (including trailing-newline rejection), while item 4's wrappers only translate mismatch errors.
 6. Duration str subclass, .minutes reparses; Defaults Duration("15m") bypasses validation; StringValue has one subclass. -> parse to timedelta/int minutes, delete StringValue.
-7. collect_validation_warnings in loader (semantic rule in YAML layer); scheduler imports loader for it; duration calc duplicated. -> validation.py + Day.available_minutes helper.
-8. minutes_since_midnight used for comparisons; time compares natively. effective_start/end annotated ClockTime instead of time.
+7. [DONE] Moved `collect_validation_warnings()` out of YAML `loader.py` into `validation.py`; both CLI and scheduler import validation there. Added `Day.available_minutes()` and reused it for warning thresholds and floating-day scheduling.
+8. [DONE] Course/day time ordering now compares `time` objects directly; `Day.effective_start()` and `effective_end()` return `datetime.time` rather than the validation-only `ClockTime` alias. `minutes_since_midnight()` remains only where minute arithmetic is needed.
 9. __init__ imports cli.main (Typer/Rich on library import); stale docstring. -> script plannings_tool.cli:main.
 10. _make_scheduled_day ~130 lines; unreachable RuntimeError; _entry_identity 4-tuple; repeated astimezone; _check_no_offset_transition mixes check + available minutes, per-minute scan. -> split allocate/diagnose/build; compute instant once.
 11. ScheduledEntry duplicates source fields; CLI redundant row_title branch. -> properties from source.

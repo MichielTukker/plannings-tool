@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .diagnostics import Diagnostic, PlanningError, Severity, display_location
-from .loader import collect_validation_warnings, load_course
+from .loader import load_course
 from .models import CourseDefinition
 from .scheduler import (
     ScheduledDay,
@@ -21,6 +21,7 @@ from .scheduler import (
     schedule_course,
 )
 from .schema import write_schema
+from .validation import collect_validation_warnings
 
 app = typer.Typer(
     name="plan",

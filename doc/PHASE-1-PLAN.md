@@ -235,7 +235,8 @@ Use a small package structure:
 | `models.py` | Input models, built-in types, field and cross-field validation |
 | `values.py` | Shared duration/time/date syntax and conversion helpers |
 | `diagnostics.py` | Shared `Diagnostic`/`Severity` types, location formatting, and the `PlanningError` hierarchy |
-| `loader.py` | Safe YAML loading, duplicate keys, file loading, validation warnings |
+| `loader.py` | Safe YAML loading, duplicate keys, and file loading |
+| `validation.py` | Semantic course checks and advisory warnings |
 | `schema.py` | Deterministic JSON Schema generation/export |
 | `cli.py` | Typer commands and Rich user-facing output |
 | `__init__.py` | Small public API exports and existing command entry-point compatibility |

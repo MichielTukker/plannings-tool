@@ -8,34 +8,7 @@ from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
 from .diagnostics import CourseValidationError, Diagnostic, Severity
-from .models import Break, CourseDefinition
-from .values import minutes_since_midnight
-
-
-def collect_validation_warnings(course: CourseDefinition) -> list[Diagnostic]:
-    """Return advisory warnings without rejecting an otherwise valid course."""
-    warnings: list[Diagnostic] = []
-    for index, day in enumerate(course.days):
-        duration = minutes_since_midnight(
-            day.effective_end(course.course)
-        ) - minutes_since_midnight(day.effective_start(course.course))
-        if (
-            day.effective_break_mode(course.defaults) == "manual"
-            and duration > 4 * 60
-            and not any(isinstance(entry, Break) for entry in day.schedule)
-        ):
-            warnings.append(
-                Diagnostic(
-                    severity=Severity.WARNING,
-                    code="missing_manual_breaks",
-                    location=("days", index, "schedule"),
-                    message=(
-                        f"Day '{day.label}' exceeds four hours in manual break mode "
-                        "but has no breaks; add manual breaks or use automatic mode"
-                    ),
-                )
-            )
-    return warnings
+from .models import CourseDefinition
 
 
 class DuplicateKeyError(ConstructorError):

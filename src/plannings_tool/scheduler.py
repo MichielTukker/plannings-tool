@@ -6,7 +6,6 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .diagnostics import Diagnostic, Location, SchedulingError, Severity
-from .loader import collect_validation_warnings
 from .models import (
     Break,
     CourseDefinition,
@@ -15,6 +14,7 @@ from .models import (
     ScheduleEntry,
     SessionEntry,
 )
+from .validation import collect_validation_warnings
 from .values import minutes_since_midnight
 
 ScheduledSource = Break | SessionEntry
@@ -151,8 +151,7 @@ def _resolve_day_window(
             end_local=end_local,
             start_at=None,
             end_at=None,
-            available_minutes=minutes_since_midnight(end_local)
-            - minutes_since_midnight(start_local),
+            available_minutes=day.available_minutes(course.course),
         )
 
     start_at = _resolve_local(day_index, "start", day.date, start_local, zone)

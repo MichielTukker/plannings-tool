@@ -1,5 +1,6 @@
 """Course input models; no timetable calculation takes place here."""
 
+from datetime import time
 from typing import Annotated, Any, ClassVar, Literal, LiteralString, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -154,7 +155,7 @@ class Course(InputModel):
 
     @model_validator(mode="after")
     def ordered_times(self) -> Self:
-        if minutes_since_midnight(self.start) >= minutes_since_midnight(self.end):
+        if self.start >= self.end:
             raise ValidationError.from_exception_data(
                 type(self).__name__,
                 [
@@ -309,11 +310,16 @@ class Day(InputModel):
     break_mode: BreakMode | None = None
     schedule: Annotated[list[ScheduleEntry], Field(min_length=1)]
 
-    def effective_start(self, course: Course) -> ClockTime:
+    def effective_start(self, course: Course) -> time:
         return self.start if self.start is not None else course.start
 
-    def effective_end(self, course: Course) -> ClockTime:
+    def effective_end(self, course: Course) -> time:
         return self.end if self.end is not None else course.end
+
+    def available_minutes(self, course: Course) -> int:
+        return minutes_since_midnight(
+            self.effective_end(course)
+        ) - minutes_since_midnight(self.effective_start(course))
 
     def effective_break_mode(self, defaults: Defaults) -> BreakMode:
         return self.break_mode if self.break_mode is not None else defaults.break_mode
@@ -376,9 +382,7 @@ class CourseDefinition(InputModel):
                         )
                     )
                 previous_date = day.date
-            if minutes_since_midnight(day.effective_start(self.course)) >= (
-                minutes_since_midnight(day.effective_end(self.course))
-            ):
+            if day.effective_start(self.course) >= day.effective_end(self.course):
                 errors.append(
                     issue(
                         "time_order",

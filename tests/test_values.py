@@ -58,7 +58,7 @@ def test_invalid_duration_message_hides_pattern():
         TypeAdapter(Duration).validate_python("1h 60m")
     error = caught.value.errors()[0]
     assert error["type"] == "duration_syntax"
-    assert "Invalid duration" in error["msg"]
+    assert error["msg"] == "Invalid duration; use a value such as '15m' or '1h 15m'"
     assert "pattern" not in error["msg"]
 
 

@@ -7,8 +7,8 @@ import yaml
 from rich.console import Console
 from typer.testing import CliRunner
 
-from plannings_tool import generate_schema
-from plannings_tool.cli import _print_issue, app
+from plannings_tool import Diagnostic, Severity, generate_schema
+from plannings_tool.cli import _print_diagnostic, app
 from plannings_tool.schema import schema_text, write_schema
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,21 +107,24 @@ def test_schema_write_failure(tmp_path):
 @pytest.mark.parametrize(
     ("severity", "ansi"),
     [
-        ("ERROR", "1;31"),
-        ("WARNING", "1;38;5;214"),
-        ("info", "1;32"),
+        (Severity.ERROR, "1;31"),
+        (Severity.WARNING, "1;38;5;214"),
+        (Severity.INFO, "1;32"),
     ],
 )
-def test_issue_output_uses_rich_styles(tmp_path, severity, ansi):
+def test_diagnostic_output_uses_rich_styles(tmp_path, severity, ansi):
     stream = StringIO()
     console = Console(file=stream, force_terminal=True, color_system="256")
-    _print_issue(
+    _print_diagnostic(
         console,
-        severity,
         tmp_path / "course.yaml",
-        "diagnostic",
-        line=12,
-        location=("days", 0),
+        Diagnostic(
+            severity=severity,
+            code="test",
+            location=("days", 0),
+            message="diagnostic",
+            line=12,
+        ),
     )
     label = severity.upper()
     assert stream.getvalue() == (

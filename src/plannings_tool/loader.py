@@ -1,6 +1,5 @@
-"""Safe YAML loading and public validation diagnostics."""
+"""Safe YAML loading and course validation."""
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -8,66 +7,14 @@ from pydantic import ValidationError
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
+from .diagnostics import CourseValidationError, Diagnostic, Severity
 from .models import Break, CourseDefinition
 from .values import minutes_since_midnight
 
 
-@dataclass(frozen=True)
-class ValidationIssue:
-    code: str
-    location: tuple[str | int, ...]
-    message: str
-    line: int | None = None
-    column: int | None = None
-
-    def __str__(self) -> str:
-        path = ""
-        for part in self.location:
-            path += f"[{part}]" if isinstance(part, int) else f".{part}"
-        path = path.lstrip(".") or "$"
-        if self.line is not None:
-            path += f" (line {self.line}, column {self.column})"
-        return f"{path}: {self.message} [{self.code}]"
-
-
-_COLLECTION_ITEMS = {"days": "day", "schedule": "entry", "trainers": "trainer"}
-_ENTRY_TAGS = frozenset(
-    {"break", "Presentation", "Exercise", "Excursion", "Interactive"}
-)
-
-
-def display_location(location: tuple[str | int, ...]) -> str:
-    """Render a location for users, e.g. ``day 1|entry 3|duration``."""
-    parts: list[str] = []
-    for position, part in enumerate(location):
-        if isinstance(part, int):
-            previous = location[position - 1] if position else None
-            if isinstance(previous, str) and parts and parts[-1] == previous:
-                parts[-1] = f"{_COLLECTION_ITEMS.get(previous, previous)} {part + 1}"
-            else:
-                parts.append(str(part + 1))
-            continue
-        # Pydantic inserts the union tag after an entry index; it adds no detail.
-        follows_entry = (
-            position >= 2
-            and location[position - 2] == "schedule"
-            and isinstance(location[position - 1], int)
-        )
-        if follows_entry and part in _ENTRY_TAGS and position + 1 < len(location):
-            continue
-        parts.append(part)
-    return "|".join(parts)
-
-
-class CourseValidationError(ValueError):
-    def __init__(self, issues: list[ValidationIssue]):
-        self.issues = issues
-        super().__init__("\n".join(str(issue) for issue in issues))
-
-
-def collect_validation_warnings(course: CourseDefinition) -> list[ValidationIssue]:
-    """Return advisory issues without rejecting an otherwise valid course."""
-    warnings: list[ValidationIssue] = []
+def collect_validation_warnings(course: CourseDefinition) -> list[Diagnostic]:
+    """Return advisory warnings without rejecting an otherwise valid course."""
+    warnings: list[Diagnostic] = []
     for index, day in enumerate(course.days):
         duration = minutes_since_midnight(
             day.effective_end(course.course)
@@ -78,7 +25,8 @@ def collect_validation_warnings(course: CourseDefinition) -> list[ValidationIssu
             and not any(isinstance(entry, Break) for entry in day.schedule)
         ):
             warnings.append(
-                ValidationIssue(
+                Diagnostic(
+                    severity=Severity.WARNING,
                     code="missing_manual_breaks",
                     location=("days", index, "schedule"),
                     message=(
@@ -130,7 +78,8 @@ def parse_course(text: str) -> CourseDefinition:
         mark = getattr(exc, "problem_mark", None)
         raise CourseValidationError(
             [
-                ValidationIssue(
+                Diagnostic(
+                    severity=Severity.ERROR,
                     code="duplicate_key"
                     if isinstance(exc, DuplicateKeyError)
                     else "yaml_syntax",
@@ -143,14 +92,22 @@ def parse_course(text: str) -> CourseDefinition:
         ) from exc
     if not isinstance(data, dict):
         raise CourseValidationError(
-            [ValidationIssue("root_mapping", (), "Expected a YAML mapping at the root")]
+            [
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="root_mapping",
+                    location=(),
+                    message="Expected a YAML mapping at the root",
+                )
+            ]
         )
     try:
         return CourseDefinition.model_validate(data)
     except ValidationError as exc:
         raise CourseValidationError(
             [
-                ValidationIssue(
+                Diagnostic(
+                    severity=Severity.ERROR,
                     code=error["type"],
                     location=error["loc"],
                     message=error["msg"],
@@ -166,6 +123,13 @@ def load_course(path: str | Path) -> CourseDefinition:
         text = Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise CourseValidationError(
-            [ValidationIssue("file_read", (), f"Cannot read course file: {exc}")]
+            [
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="file_read",
+                    location=(),
+                    message=f"Cannot read course file: {exc}",
+                )
+            ]
         ) from exc
     return parse_course(text)

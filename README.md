@@ -171,6 +171,8 @@ break mode. Editor email-format checks depend on editor support. Always run
 ```python
 from plannings_tool import (
     CourseValidationError,
+    PlanningError,
+    SchedulingError,
     generate_schema,
     load_course,
     parse_course,
@@ -186,11 +188,25 @@ schedule = schedule_course(course)
 ```
 
 `parse_course(text)` validates YAML without file I/O. Both loading functions
-raise `CourseValidationError` with an `issues` list containing codes, locations,
-messages, and optional source line/column information.
+raise `CourseValidationError` with a `diagnostics` tuple.
 
-Use `collect_validation_warnings(course)` to obtain advisory issues separately
-after loading or parsing. The loading functions do not emit warnings themselves.
+All reported problems share one `Diagnostic` type. It has:
+
+- `severity`: a `Severity` value (`error`, `warning`, or `info`);
+- `code`: a stable code;
+- `location`: a structured path such as `("days", 0, "schedule", 2)`;
+- `message`: the readable text;
+- `line` and `column`: set for YAML syntax and duplicate-key errors.
+
+`CourseValidationError` and `SchedulingError` both derive from `PlanningError`.
+Catch `PlanningError` to handle either one through its `diagnostics`. These
+types live in `plannings_tool.diagnostics`, which also provides
+`display_location()`. It renders a location such as `day 1|entry 3`, as the
+CLI does.
+
+Use `collect_validation_warnings(course)` to obtain advisory warning
+diagnostics separately after loading or parsing. The loading functions do not
+emit warnings themselves.
 
 ## Development
 
@@ -202,9 +218,9 @@ uv run ruff format --check .
 uv run ty check
 ```
 
-`schedule_course` returns a `ScheduleResult` with ordered day/entry data and
-structured warnings; it raises `SchedulingError` for unsupported automatic
-breaks and timezone resolution failures.
+`schedule_course` returns a `ScheduleResult`. It holds ordered day/entry data
+and `Diagnostic` warnings. It raises `SchedulingError` for unsupported
+automatic breaks and timezone resolution failures.
 
 Tests check that the committed schema matches model generation. See
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) and

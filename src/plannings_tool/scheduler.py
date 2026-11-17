@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .diagnostics import Diagnostic, Location, SchedulingError, Severity
 from .loader import collect_validation_warnings
 from .models import (
     Break,
@@ -18,28 +19,7 @@ from .models import (
 )
 from .values import minutes_since_midnight
 
-DiagnosticSeverity = Literal["warning", "error"]
 ScheduledSource = Break | Presentation | Exercise | Excursion | Interactive
-
-
-@dataclass(frozen=True)
-class ScheduleDiagnostic:
-    severity: DiagnosticSeverity
-    code: str
-    location: tuple[str | int, ...]
-    message: str
-
-    def __str__(self) -> str:
-        path = ""
-        for part in self.location:
-            path += f"[{part}]" if isinstance(part, int) else f".{part}"
-        return f"{path.lstrip('.') or '$'}: {self.message} [{self.code}]"
-
-
-class SchedulingError(ValueError):
-    def __init__(self, diagnostics: list[ScheduleDiagnostic]):
-        self.diagnostics = tuple(diagnostics)
-        super().__init__("\n".join(str(issue) for issue in diagnostics))
 
 
 @dataclass(frozen=True)
@@ -79,14 +59,14 @@ class ScheduledDay:
 @dataclass(frozen=True)
 class ScheduleResult:
     days: tuple[ScheduledDay, ...]
-    diagnostics: tuple[ScheduleDiagnostic, ...]
+    diagnostics: tuple[Diagnostic, ...]
 
     @property
-    def warnings(self) -> tuple[ScheduleDiagnostic, ...]:
+    def warnings(self) -> tuple[Diagnostic, ...]:
         return tuple(
             diagnostic
             for diagnostic in self.diagnostics
-            if diagnostic.severity == "warning"
+            if diagnostic.severity == Severity.WARNING
         )
 
 
@@ -99,10 +79,17 @@ class _DayWindow:
     available_minutes: int
 
 
-def _failure(
-    code: str, message: str, location: tuple[str | int, ...]
-) -> SchedulingError:
-    return SchedulingError([ScheduleDiagnostic("error", code, location, message)])
+def _failure(code: str, message: str, location: Location) -> SchedulingError:
+    return SchedulingError(
+        [
+            Diagnostic(
+                severity=Severity.ERROR,
+                code=code,
+                location=location,
+                message=message,
+            )
+        ]
+    )
 
 
 def _resolve_local(
@@ -220,7 +207,7 @@ def _make_scheduled_day(
     day_index: int,
     day: Day,
     zone: ZoneInfo,
-) -> tuple[ScheduledDay, list[ScheduleDiagnostic]]:
+) -> tuple[ScheduledDay, list[Diagnostic]]:
     window = _resolve_day_window(course, day_index, day, zone)
     fixed_total = sum(
         _source_duration(entry, course)
@@ -246,14 +233,14 @@ def _make_scheduled_day(
             durations.append(interactive_duration)
         else:
             durations.append(_source_duration(entry, course))
-    diagnostics: list[ScheduleDiagnostic] = []
+    diagnostics: list[Diagnostic] = []
     if interactive_index is not None and remaining < 15:
         diagnostics.append(
-            ScheduleDiagnostic(
-                "warning",
-                "interactive_minimum_overflow",
-                ("days", day_index, "schedule", interactive_index),
-                f"Interactive needs its 15-minute minimum, causing "
+            Diagnostic(
+                severity=Severity.WARNING,
+                code="interactive_minimum_overflow",
+                location=("days", day_index, "schedule", interactive_index),
+                message=f"Interactive needs its 15-minute minimum, causing "
                 f"{15 - remaining} minutes of overflow",
             )
         )
@@ -267,21 +254,22 @@ def _make_scheduled_day(
                     crossing_index = index
                     break
             diagnostics.append(
-                ScheduleDiagnostic(
-                    "warning",
-                    "schedule_overflow",
-                    ("days", day_index, "schedule", crossing_index),
-                    f"Schedule exceeds the configured day by "
+                Diagnostic(
+                    severity=Severity.WARNING,
+                    code="schedule_overflow",
+                    location=("days", day_index, "schedule", crossing_index),
+                    message=f"Schedule exceeds the configured day by "
                     f"{fixed_total - window.available_minutes} minutes",
                 )
             )
         elif fixed_total < window.available_minutes:
             diagnostics.append(
-                ScheduleDiagnostic(
-                    "warning",
-                    "unused_time",
-                    ("days", day_index, "schedule"),
-                    f"{window.available_minutes - fixed_total} minutes remain unused",
+                Diagnostic(
+                    severity=Severity.WARNING,
+                    code="unused_time",
+                    location=("days", day_index, "schedule"),
+                    message=f"{window.available_minutes - fixed_total} minutes "
+                    "remain unused",
                 )
             )
 
@@ -356,12 +344,12 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
     if automatic_days:
         raise SchedulingError(
             [
-                ScheduleDiagnostic(
-                    "error",
-                    "automatic_breaks_not_supported",
-                    ("days", index, "break_mode"),
-                    f"Automatic break placement is not supported yet for day "
-                    f"'{day.label}'; use manual break mode",
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="automatic_breaks_not_supported",
+                    location=("days", index, "break_mode"),
+                    message=f"Automatic break placement is not supported yet for "
+                    f"day '{day.label}'; use manual break mode",
                 )
                 for index, day in automatic_days
             ]
@@ -377,11 +365,8 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
         ) from exc
 
     scheduled_days: list[ScheduledDay] = []
-    diagnostics = [
-        ScheduleDiagnostic("warning", item.code, item.location, item.message)
-        for item in collect_validation_warnings(course)
-    ]
-    errors: list[ScheduleDiagnostic] = []
+    diagnostics = collect_validation_warnings(course)
+    errors: list[Diagnostic] = []
     for index, day in enumerate(course.days):
         try:
             scheduled_day, day_diagnostics = _make_scheduled_day(

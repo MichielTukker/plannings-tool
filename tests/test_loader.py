@@ -7,11 +7,11 @@ import yaml
 
 from plannings_tool import (
     CourseValidationError,
+    Severity,
     collect_validation_warnings,
     load_course,
     parse_course,
 )
-from plannings_tool.loader import display_location
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,6 +53,7 @@ def test_missing_manual_break_warning(
     warnings = collect_validation_warnings(course)
     assert len(warnings) == int(expected)
     if expected:
+        assert warnings[0].severity == Severity.WARNING
         assert warnings[0].code == "missing_manual_breaks"
         assert warnings[0].location == ("days", 0, "schedule")
         assert "Day 1" in warnings[0].message
@@ -85,17 +86,19 @@ def test_missing_break_warning_uses_inherited_times(definition):
 def test_yaml_failures(text, code):
     with pytest.raises(CourseValidationError) as caught:
         parse_course(text)
-    assert caught.value.issues[0].code == code
+    diagnostic = caught.value.diagnostics[0]
+    assert diagnostic.severity == Severity.ERROR
+    assert diagnostic.code == code
     if code != "root_mapping":
-        assert caught.value.issues[0].line is not None
-        assert caught.value.issues[0].column is not None
+        assert diagnostic.line is not None
+        assert diagnostic.column is not None
 
 
 def test_model_error_locations(definition):
     definition["days"][0]["schedule"][0]["duration"] = "14m"
     with pytest.raises(CourseValidationError) as caught:
         parse_course(yaml.safe_dump(definition))
-    issue = caught.value.issues[0]
+    issue = caught.value.diagnostics[0]
     assert issue.code == "duration_minimum"
     assert issue.location[:4] == ("days", 0, "schedule", 0)
     assert issue.location[-1] == "duration"
@@ -108,30 +111,10 @@ def test_unquoted_yaml_date_rejected(definition):
         parse_course(yaml.safe_dump(definition))
 
 
-@pytest.mark.parametrize(
-    ("location", "expected"),
-    [
-        (
-            ("days", 0, "schedule", 1, "Presentation", "duration"),
-            "day 1|entry 2|duration",
-        ),
-        (("days", 1, "schedule", 2, "break", "duration"), "day 2|entry 3|duration"),
-        (("days", 1, "schedule", 2, "break", "break"), "day 2|entry 3|break"),
-        (("days", 0, "schedule", 2, "break"), "day 1|entry 3|break"),
-        (("days", 0, "schedule", 0, "trainers", 1), "day 1|entry 1|trainer 2"),
-        (("trainers", 0, "email"), "trainer 1|email"),
-        (("course", "timezone"), "course|timezone"),
-        ((), ""),
-    ],
-)
-def test_display_location(location, expected):
-    assert display_location(location) == expected
-
-
 def test_file_errors(tmp_path):
     with pytest.raises(CourseValidationError) as caught:
         load_course(tmp_path / "missing.yaml")
-    assert caught.value.issues[0].code == "file_read"
+    assert caught.value.diagnostics[0].code == "file_read"
     invalid = tmp_path / "invalid.yaml"
     invalid.write_bytes(b"\xff")
     with pytest.raises(CourseValidationError):

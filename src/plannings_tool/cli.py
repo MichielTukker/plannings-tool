@@ -1,5 +1,6 @@
 """Typer commands and Rich terminal output."""
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated
 
@@ -10,18 +11,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .loader import (
-    CourseValidationError,
-    collect_validation_warnings,
-    display_location,
-    load_course,
-)
+from .diagnostics import Diagnostic, PlanningError, Severity, display_location
+from .loader import collect_validation_warnings, load_course
 from .models import CourseDefinition
 from .scheduler import (
     ScheduledDay,
     ScheduledEntry,
     ScheduleResult,
-    SchedulingError,
     schedule_course,
 )
 from .schema import write_schema
@@ -36,45 +32,35 @@ app = typer.Typer(
 
 
 SEVERITY_STYLES = {
-    "ERROR": "bold red",
-    "WARNING": "bold orange1",
-    "INFO": "bold green",
+    Severity.ERROR: "bold red",
+    Severity.WARNING: "bold orange1",
+    Severity.INFO: "bold green",
 }
 
 
-def _print_issue(
-    console: Console,
-    severity: str,
-    path: Path,
-    message: str,
-    *,
-    line: int | None = None,
-    location: tuple[str | int, ...] = (),
-) -> None:
-    severity = severity.upper()
+def _print_diagnostic(console: Console, path: Path, diagnostic: Diagnostic) -> None:
     # TODO: carry YAML line numbers into model and scheduling diagnostics; until
     # then, the day/entry location identifies where the problem is.
-    source = str(line) if line is not None else display_location(location) or "~"
+    if diagnostic.line is not None:
+        source = str(diagnostic.line)
+    else:
+        source = display_location(diagnostic.location) or "~"
     output = Text()
-    output.append(f"[{severity}]", style=SEVERITY_STYLES[severity])
+    output.append(
+        f"[{diagnostic.severity.upper()}]",
+        style=SEVERITY_STYLES[diagnostic.severity],
+    )
     output.append(" - ")
     output.append(f"{path.name}:{source}", style="cyan")
-    output.append(f" - {message}")
+    output.append(f" - {diagnostic.message}")
     console.print(output, soft_wrap=True)
 
 
-def _print_validation_issues(
-    console: Console, path: Path, error: CourseValidationError
+def _print_diagnostics(
+    console: Console, path: Path, diagnostics: Iterable[Diagnostic]
 ) -> None:
-    for issue in error.issues:
-        _print_issue(
-            console,
-            "ERROR",
-            path,
-            issue.message,
-            line=issue.line,
-            location=issue.location,
-        )
+    for diagnostic in diagnostics:
+        _print_diagnostic(console, path, diagnostic)
 
 
 def _format_duration(minutes: int) -> str:
@@ -152,19 +138,11 @@ def validate(
     error_console = Console(stderr=True)
     try:
         definition = load_course(course)
-    except CourseValidationError as exc:
-        _print_validation_issues(error_console, course, exc)
+    except PlanningError as exc:
+        _print_diagnostics(error_console, course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    for warning in collect_validation_warnings(definition):
-        _print_issue(
-            error_console,
-            "WARNING",
-            course,
-            warning.message,
-            line=warning.line,
-            location=warning.location,
-        )
+    _print_diagnostics(error_console, course, collect_validation_warnings(definition))
 
     success = Text()
     success.append("Valid course", style="bold green")
@@ -184,28 +162,11 @@ def schedule(
     try:
         definition = load_course(course)
         result = schedule_course(definition)
-    except CourseValidationError as exc:
-        _print_validation_issues(error_console, course, exc)
-        raise typer.Exit(code=1) from exc
-    except SchedulingError as exc:
-        for diagnostic in exc.diagnostics:
-            _print_issue(
-                error_console,
-                diagnostic.severity,
-                course,
-                diagnostic.message,
-                location=diagnostic.location,
-            )
+    except PlanningError as exc:
+        _print_diagnostics(error_console, course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    for diagnostic in result.warnings:
-        _print_issue(
-            error_console,
-            diagnostic.severity,
-            course,
-            diagnostic.message,
-            location=diagnostic.location,
-        )
+    _print_diagnostics(error_console, course, result.warnings)
     if strict and result.warnings:
         raise typer.Exit(code=1)
     _print_schedule(Console(), result, definition)
@@ -223,11 +184,15 @@ def schema(
     try:
         write_schema(output)
     except OSError as exc:
-        _print_issue(
+        _print_diagnostic(
             error_console,
-            "ERROR",
             output,
-            f"Cannot write schema: {exc}",
+            Diagnostic(
+                severity=Severity.ERROR,
+                code="schema_write",
+                location=(),
+                message=f"Cannot write schema: {exc}",
+            ),
         )
         raise typer.Exit(code=1) from exc
 

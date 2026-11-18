@@ -195,8 +195,8 @@ class Trainer(InputModel):
 
 
 class Defaults(InputModel):
-    coffee_break: Duration = Field(15, json_schema_extra={"default": "15m"})
-    lunch: Duration = Field(45, json_schema_extra={"default": "45m"})
+    coffee_break: Duration = Field(default=15, json_schema_extra={"default": "15m"})
+    lunch: Duration = Field(default=45, json_schema_extra={"default": "45m"})
     break_mode: BreakMode = "manual"
 
 

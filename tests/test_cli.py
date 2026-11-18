@@ -6,7 +6,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from plannings_tool import cli
-from plannings_tool.cli import STDERR, STDOUT, app
+from plannings_tool.cli import app
 
 ROOT = Path(__file__).resolve().parents[1]
 runner = CliRunner()

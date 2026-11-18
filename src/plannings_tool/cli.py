@@ -32,12 +32,16 @@ from .validation import check_missing_manual_breaks
 
 app = typer.Typer(
     name="plan",
-    help="Validate courses, preview and render schedules, and export the schema.",
+    help="Preview, schedule and render a time schedule for courses.",
     no_args_is_help=True,
     add_completion=False,
     rich_markup_mode="rich",
 )
 
+# Rich Console,  modify properties as needed.  Note that the unit tests actually
+# check console behavior (colloring, stdout/stderr, etc.
+STDOUT = Console(color_system="auto", stderr=False)
+STDERR = Console(color_system="auto", stderr=True)
 
 SEVERITY_STYLES = {
     Severity.ERROR: "bold red",
@@ -46,14 +50,7 @@ SEVERITY_STYLES = {
 }
 
 
-def _console(context: typer.Context, *, stderr: bool = False) -> Console:
-    return Console(
-        stderr=stderr,
-        force_terminal=context.color,
-    )
-
-
-def _print_diagnostic(console: Console, path: Path, diagnostic: Diagnostic) -> None:
+def _print_diagnostic(path: Path, diagnostic: Diagnostic) -> None:
     # TODO: carry YAML line numbers into model and scheduling diagnostics; until
     # then, the day/entry location identifies where the problem is.
     if diagnostic.line is not None:
@@ -68,19 +65,18 @@ def _print_diagnostic(console: Console, path: Path, diagnostic: Diagnostic) -> N
     output.append(" - ")
     output.append(f"{path.name}:{source}", style="cyan")
     output.append(f" - {diagnostic.message}")
-    console.print(output, soft_wrap=True)
+    if diagnostic.severity == Severity.INFO:
+        STDOUT.print(output, soft_wrap=True)
+    else:
+        STDERR.print(output, soft_wrap=True)
 
 
-def _print_diagnostics(
-    console: Console, path: Path, diagnostics: Iterable[Diagnostic]
-) -> None:
+def _print_diagnostics(path: Path, diagnostics: Iterable[Diagnostic]) -> None:
     for diagnostic in diagnostics:
-        _print_diagnostic(console, path, diagnostic)
+        _print_diagnostic(path, diagnostic)
 
 
-def _print_schedule(
-    console: Console, result: ScheduleResult, course: CourseDefinition
-) -> None:
+def _print_schedule(result: ScheduleResult, course: CourseDefinition) -> None:
     trainer_names = {trainer.id: trainer.name for trainer in course.trainers}
     for day in result.days:
         title = Text(day.label, style="bold cyan")
@@ -95,7 +91,7 @@ def _print_schedule(
             details.append(f"  |  {day.location}")
         if day.date is None:
             details.append("  |  floating local times", style="yellow")
-        console.print(Panel(details, title=title, border_style="cyan"))
+        STDOUT.print(Panel(details, title=title, border_style="cyan"))
 
         table = Table(box=box.SIMPLE_HEAVY)
         table.add_column("Start", style="cyan", no_wrap=True)
@@ -116,27 +112,23 @@ def _print_schedule(
                 Text(format_entry_title(entry)),
                 Text(names or "-"),
             )
-        console.print(table)
+        STDOUT.print(table)
 
 
 @app.command(help="Validate a course YAML file.")
 def validate(
-    context: typer.Context,
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
 ) -> None:
     """Validate a course definition and report advisory warnings."""
-    console = _console(context)
-    error_console = _console(context, stderr=True)
     try:
         definition = load_course(course)
     except PlanningError as exc:
-        _print_diagnostics(error_console, course, exc.diagnostics)
+        _print_diagnostics(course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    _print_diagnostics(error_console, course, check_missing_manual_breaks(definition))
+    _print_diagnostics(course, check_missing_manual_breaks(definition))
 
     _print_diagnostic(
-        console,
         course,
         Diagnostic(
             severity=Severity.INFO,
@@ -149,31 +141,27 @@ def validate(
 
 @app.command(help="Schedule a course with manual or automatic breaks.")
 def schedule(
-    context: typer.Context,
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
     strict: Annotated[
         bool, typer.Option("--strict", help="Treat scheduling warnings as failures")
     ] = False,
 ) -> None:
     """Build and display a sequential schedule preview."""
-    console = _console(context)
-    error_console = _console(context, stderr=True)
     try:
         definition = load_course(course)
         result = schedule_course(definition)
     except PlanningError as exc:
-        _print_diagnostics(error_console, course, exc.diagnostics)
+        _print_diagnostics(course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    _print_diagnostics(error_console, course, result.diagnostics)
+    _print_diagnostics(course, result.diagnostics)
     if strict and result.warnings:
         raise typer.Exit(code=1)
-    _print_schedule(console, result, definition)
+    _print_schedule(result, definition)
 
 
 @app.command(help="Render a course schedule to PDF, PNG, and Markdown.")
 def render(
-    context: typer.Context,
     course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
     output_dir: Annotated[
         Path | None,
@@ -208,16 +196,14 @@ def render(
     if template is not None and RenderFormat.MARKDOWN not in formats:
         raise typer.BadParameter("--template requires --format md")
 
-    console = _console(context)
-    error_console = _console(context, stderr=True)
     try:
         definition = load_course(course)
         result = schedule_course(definition)
     except PlanningError as exc:
-        _print_diagnostics(error_console, course, exc.diagnostics)
+        _print_diagnostics(course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
-    _print_diagnostics(error_console, course, result.diagnostics)
+    _print_diagnostics(course, result.diagnostics)
     if strict and result.warnings:
         raise typer.Exit(code=1)
 
@@ -242,29 +228,25 @@ def render(
         )
         written = write_outputs_atomically(outputs)
     except PlanningError as exc:
-        _print_diagnostics(error_console, course, exc.diagnostics)
+        _print_diagnostics(course, exc.diagnostics)
         raise typer.Exit(code=1) from exc
 
     for path, diagnostic in written:
-        _print_diagnostic(console, path, diagnostic)
+        _print_diagnostic(path, diagnostic)
 
 
 @app.command(help="Export the editor JSON Schema.")
 def schema(
-    context: typer.Context,
     output: Annotated[
         Path,
         typer.Option("--output", help="Destination JSON file", show_default=False),
     ],
 ) -> None:
     """Write the generated JSON Schema atomically."""
-    console = _console(context)
-    error_console = _console(context, stderr=True)
     try:
         write_schema(output)
     except OSError as exc:
         _print_diagnostic(
-            error_console,
             output,
             Diagnostic(
                 severity=Severity.ERROR,
@@ -276,7 +258,6 @@ def schema(
         raise typer.Exit(code=1) from exc
 
     _print_diagnostic(
-        console,
         output,
         Diagnostic(
             severity=Severity.INFO,

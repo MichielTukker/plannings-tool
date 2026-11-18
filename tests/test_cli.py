@@ -5,7 +5,8 @@ import yaml
 from rich.console import Console
 from typer.testing import CliRunner
 
-from plannings_tool.cli import app
+from plannings_tool import cli
+from plannings_tool.cli import STDERR, STDOUT, app
 
 ROOT = Path(__file__).resolve().parents[1]
 runner = CliRunner()
@@ -104,14 +105,12 @@ def test_schema_write_failure(tmp_path):
 def test_validate_diagnostics_use_rich_severity_colors(
     tmp_path, definition, monkeypatch
 ):
-    real_console = Console
-
-    def force_terminal_console(**kwargs):
-        kwargs["force_terminal"] = True
-        kwargs["color_system"] = "256"
-        return real_console(**kwargs)
-
-    monkeypatch.setattr("plannings_tool.cli.Console", force_terminal_console)
+    monkeypatch.setattr(
+        cli, "STDERR", Console(force_terminal=True, color_system="256", stderr=True)
+    )
+    monkeypatch.setattr(
+        cli, "STDOUT", Console(force_terminal=True, color_system="256", stderr=False)
+    )
     definition["course"].update(start="09:00", end="14:00")
     path = tmp_path / "course.yaml"
     path.write_text(yaml.safe_dump(definition), encoding="utf-8")
@@ -177,7 +176,7 @@ def test_schedule_cli_automatic_preview_and_infos():
     assert "part" in result.stdout
     assert "1/2" in result.stdout
     assert "Coffee break" in result.stdout
-    assert "[INFO] - Kleppen_auto_breaks.yaml:day 2|entry 3 - " in result.stderr
+    assert "[INFO] - Kleppen_auto_breaks.yaml:day 2|entry 3 - " in result.stdout
     assert "[WARNING] - Kleppen_auto_breaks.yaml:day 2|entry 6 - " in result.stderr
 
 
@@ -210,4 +209,4 @@ def test_schedule_cli_strict_ignores_info_diagnostics(tmp_path, definition):
     result = runner.invoke(app, ["schedule", str(path), "--strict"])
     assert result.exit_code == 0
     assert "Discussion" in result.stdout
-    assert "[INFO] - course.yaml:day 1 - " in result.stderr
+    assert "[INFO] - course.yaml:day 1 - " in result.stdout

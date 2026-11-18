@@ -2,8 +2,8 @@
 
 A Python course-planning tool. Phases 1 and 2 provide YAML validation, JSON
 Schema export, and a sequential schedule preview. Phase 3 adds automatic
-breaks and session splitting. PDF, per-day Gantt PNG, and Markdown timetable
-rendering (phase 4) are planned but not implemented yet.
+breaks and session splitting. Phase 4 renders schedules as a PDF, transparent
+per-day Gantt PNGs, and a Markdown timetable.
 
 ## Install and run
 
@@ -42,6 +42,44 @@ status; `--strict` treats warnings as failures and suppresses the preview.
 Manual-mode days longer than four hours with no breaks produce a
 `missing_manual_breaks` warning on stderr, using inherited or overridden day
 times. Warnings do not reject the course or change the successful exit code.
+
+## Rendering
+
+Render all formats into the current directory or choose an output directory:
+
+```powershell
+uv run plan render testdata\Kleppen-cursus-2026.yaml --output-dir output
+```
+
+The command writes `<stem>.pdf`, `<stem>.md`, and one transparent
+`<stem>-day-<n>.png` per course day. PNG day numbers are zero-padded when there
+are ten or more days. Select formats by repeating `--format` with `pdf`, `png`,
+or `md`; omitting it writes all formats. The bundled Deltares logo is used for
+PDF and PNG output. Use `--logo path\to\logo.png` to override it or `--no-logo`
+to omit it. Scheduling warnings are printed to stderr and included in the PDF
+and Markdown; `--strict` treats warnings as failures and writes no files.
+Rendering completes before any files are written, and each output is replaced
+atomically.
+
+### Markdown templates
+
+The Markdown timetable is rendered from the bundled Jinja2 template
+[src/plannings_tool/templates/timetable.md.j2](src/plannings_tool/templates/timetable.md.j2).
+Pass `--template path\to\custom.md.j2` with Markdown output selected to use a
+UTF-8 template of your own; it is an error to combine `--template` with only
+`pdf` or `png` formats. Templates run in a Jinja2 sandbox, undefined variables
+are errors, and output is not HTML-escaped. Trailing whitespace is trimmed and
+the file ends with one newline. Templates receive:
+
+| Variable | Fields |
+|---|---|
+| `course` | `title`, `description`, `project_id`, `timezone` |
+| `warnings` | Course-level warning messages |
+| `days` | Each has `label`, `date` (ISO date or none for floating days), `location`, `start`, `end` (`HH:MM`), `entries`, and `warnings` |
+| `day.entries` | Each has `kind` (`session` or `break`), `start`, `end`, `duration`, `title` (with part label), `type` (none for breaks), and `trainers` (names) |
+
+The `md_cell` filter escapes `\` and `|` and replaces line breaks with spaces,
+for use in table cells and list items.
 
 ## Course YAML
 
@@ -213,6 +251,30 @@ results expose warning-only `warnings` and informational `infos`. These
 types live in `plannings_tool.diagnostics`, which also provides
 `display_location()`. It renders a location such as `day 1|entry 3`, as the
 CLI does.
+
+`ScheduleResult` also carries the validated course definition for renderers.
+The rendering API is in `plannings_tool.render`:
+
+```python
+from plannings_tool.render import (
+    RenderError,
+    load_default_logo,
+    load_markdown_template,
+    render_gantt_png,
+    render_markdown,
+    render_pdf,
+)
+
+pdf_bytes = render_pdf(schedule, logo=load_default_logo())
+png_bytes = render_gantt_png(schedule, day_index=0, logo=None)
+markdown_text = render_markdown(schedule)
+custom_text = render_markdown(
+    schedule, template=load_markdown_template(Path("custom.md.j2"))
+)
+```
+
+`RenderError` derives from `PlanningError` and reports layout, logo, template,
+rendering, or output diagnostics.
 
 Use `check_missing_manual_breaks(course)` to obtain advisory warning
 diagnostics for long manual-mode days without breaks, separately after loading

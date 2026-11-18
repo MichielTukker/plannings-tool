@@ -11,9 +11,9 @@ Provide a local CLI backed by reusable Python functions. Keep input parsing,
 scheduling, and rendering separate so future email templates, action lists,
 requirement lists, and a web frontend can consume the same resolved schedule.
 
-Phases 1-3 are implemented: validation, JSON Schema export, manual and
-automatic-break scheduling, session splitting, and the `plan schedule`
-preview. Phase 4 (rendering) is planned.
+Phases 1-4 are implemented: validation, JSON Schema export, manual and
+automatic-break scheduling, session splitting, the `plan schedule` preview,
+and PDF, per-day Gantt PNG, and Markdown rendering.
 
 ## 1. Define the input contract
 
@@ -205,7 +205,8 @@ See [PHASE-4-PLAN.md](PHASE-4-PLAN.md) for the detailed rendering plan.
 
 Draw the Gantt chart with matplotlib. Use one figure builder for both the
 standalone PNG and the chart embedded in the PDF. Lay out PDF pages with
-ReportLab.
+ReportLab. Render the Markdown timetable from a bundled Jinja2 template that
+users can replace with `--template`.
 
 The Gantt chart has one row per original session. The fragments of a split
 session appear as separate bars on that row. Breaks are labelled shaded
@@ -252,11 +253,11 @@ plan validate course.yaml
 plan schema --output course.schema.json
 plan schedule course.yaml [--strict]
 plan render course.yaml [--output-dir DIR] [--format pdf|png|md ...]
-                        [--logo PATH | --no-logo] [--strict]
+                        [--logo PATH | --no-logo] [--template PATH] [--strict]
 ```
 
 Validation and schema export are implemented in phase 1 and the schedule
-preview in phase 2. Rendering comes in phase 4. `plan render` writes
+preview in phase 2. Rendering is implemented in phase 4. `plan render` writes
 `<stem>.pdf`, `<stem>-day-<n>.png`, and `<stem>.md` to the output directory
 (default: current directory). It writes all formats by default.
 
@@ -280,8 +281,8 @@ temporary files.
 | 1 | Models, generated JSON Schema, updated example YAML, helpful validation errors | Done |
 | 2 | Typed date/time runtime values, optional timezone with Amsterdam default, DST validation, manual scheduling, flexible allocation, structured diagnostics | Done |
 | 3 | Automatic breaks, session splitting, deterministic placement, info diagnostics | Done ([PHASE-3-PLAN.md](PHASE-3-PLAN.md)) |
-| 4 | PDF, per-day transparent Gantt PNGs, Markdown timetable, trainer colors/stripes, bundled logo, `plan render` | Planned ([PHASE-4-PLAN.md](PHASE-4-PLAN.md)) |
-| 5 | Documentation and end-to-end examples | Planned |
+| 4 | PDF, per-day transparent Gantt PNGs, Markdown timetable, trainer colors/stripes, bundled logo, `plan render` | Done ([PHASE-4-PLAN.md](PHASE-4-PLAN.md)) |
+| 5 | Documentation and end-to-end examples | Done ([README.md](../README.md); both `testdata` course examples) |
 
 ## Validation strategy
 

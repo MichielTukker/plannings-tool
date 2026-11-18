@@ -1,5 +1,9 @@
 # Phase 4: Rendering — PDF, Gantt PNG, and Markdown timetable
 
+**Status: Implemented.** The README documents the CLI and rendering API;
+automated acceptance and regression checks pass, and the Gantt PNGs were
+visually inspected.
+
 ## Outcome and boundaries
 
 Render a resolved `ScheduleResult` into three output formats from one command:
@@ -150,10 +154,20 @@ Course description.
 - Interactive needs its 15-minute minimum, causing 15 minutes of overflow
 ```
 
-- Write course-level warnings under the course heading, as a `## Warnings`
+- Write course-level warnings under the course heading, as a `### Warnings`
   section. Omit warning sections that would be empty.
 - Escape `|` and `\` in cell text and replace line breaks with spaces.
 - Undated days show "floating local time" instead of the date.
+- Render the output from the bundled sandboxed Jinja2 template
+  `src/plannings_tool/templates/timetable.md.j2`. Python builds a view model
+  (`course`, `warnings`, `days` with formatted `entries`), and the template
+  controls presentation, using the `md_cell` filter for escaping. Undefined
+  variables are errors, output is not HTML-escaped, and trailing whitespace is
+  normalized to one final newline.
+- `--template PATH` replaces the bundled template with a UTF-8 template. An
+  unreadable file raises `template_unreadable`. Syntax, undefined-variable,
+  sandbox, or evaluation failures raise `template_error`. In both cases,
+  nothing is written.
 
 ### Logo
 
@@ -176,10 +190,13 @@ plan render course.yaml
 plan render course.yaml --output-dir out --format pdf --format png
 plan render course.yaml --logo other-logo.png
 plan render course.yaml --no-logo --strict
+plan render course.yaml --format md --template custom.md.j2
 ```
 
 - `--format` is repeatable with values `pdf`, `png`, and `md`. The default is
   all three.
+- `--template` requires Markdown output; combining it with only `pdf` or `png`
+  is a Typer usage error (exit code 2).
 - `--output-dir` defaults to the current working directory and is created if
   it is missing.
 - Load and schedule first. Print warnings and info diagnostics to stderr, as
@@ -199,12 +216,13 @@ plan render course.yaml --no-logo --strict
 ### Python API
 
 Add a `plannings_tool.render` subpackage. `import plannings_tool` must not import
-it or load matplotlib or ReportLab.
+it or load matplotlib, ReportLab, or Jinja2.
 
 ```python
 from plannings_tool.render import (
     RenderError,
     load_default_logo,
+    load_markdown_template,
     render_gantt_png,
     render_markdown,
     render_pdf,
@@ -213,13 +231,17 @@ from plannings_tool.render import (
 pdf_bytes = render_pdf(result, logo=load_default_logo())
 png_bytes = render_gantt_png(result, day_index=0, logo=None)
 markdown_text = render_markdown(result)
+custom_text = render_markdown(
+    result, template=load_markdown_template(Path("custom.md.j2"))
+)
 ```
 
 - `logo` is image bytes, or `None` to omit the logo.
 - `RenderError` derives from `PlanningError` and carries diagnostics. Define it
   in `diagnostics.py`, next to the existing error types.
 - New `DiagnosticCode` values: `layout_overflow`, `logo_unreadable`,
-  `output_write`, and `output_written`.
+  `output_write`, `output_written`, `render_failure`, `template_error`, and
+  `template_unreadable`.
 
 Module layout:
 
@@ -229,15 +251,17 @@ src/plannings_tool/render/__init__.py public render API
 src/plannings_tool/render/colors.py   trainer color assignment
 src/plannings_tool/render/gantt.py    matplotlib figure builder (PNG + PDF variants)
 src/plannings_tool/render/pdf.py      ReportLab page assembly
-src/plannings_tool/render/markdown.py Markdown timetable
+src/plannings_tool/render/markdown.py Markdown view model and Jinja2 rendering
 src/plannings_tool/render/output.py   file naming and atomic multi-file writing
 src/plannings_tool/assets/deltares-logo.png
+src/plannings_tool/templates/timetable.md.j2
 ```
 
 ### Dependencies
 
 - Runtime: `matplotlib` and `reportlab`. Add `pillow` explicitly if code imports
-  it directly, for example for logo decoding.
+  it directly, for example for logo decoding. Add `jinja2` for Markdown
+  templates.
 - Dev: `pypdf`, for page count and text extraction in tests.
 
 ## Implementation sequence
@@ -261,6 +285,10 @@ src/plannings_tool/assets/deltares-logo.png
 ### 3. Markdown renderer
 
 - Implement `render_markdown` with escaping, fragments, and warning sections.
+- Render through the bundled Jinja2 template, with `load_markdown_template`,
+  `--template`, `template_unreadable`, and `template_error`. Verify that the
+  bundled template reproduces the previous output byte for byte and that the
+  wheel contains it.
 
 ### 4. PDF renderer
 
@@ -299,14 +327,16 @@ and a generated test logo. Do not compare pixels.
 | Gantt PNG | Valid RGBA PNG, 1920 px wide; corner pixel alpha 0; height grows with rows; one file per day; byte-identical on re-render; no matplotlib version metadata |
 | Gantt content | Unit tests on the figure model: one row per `schedule_index`; split session has 2 bars on 1 row; break bands; axis range and overrun line |
 | Markdown | Exact output for both Kleppen examples, with fragments, automatic breaks, warnings, escaping, and undated days |
+| Markdown templates | Custom template receives the view model and `md_cell`; syntax, undefined-variable, and sandbox errors raise `template_error`; missing or non-UTF-8 files raise `template_unreadable`; CLI failure writes nothing; `--template` without `md` is a usage error |
 | PDF | Page count equals day count; extracted text contains titles, times, trainer names, and warnings; description only on page 1; `layout_overflow` for an oversized day; metadata set |
 | Logo | Bundled asset loads; `--logo` override; `--no-logo`; using both is a usage error; an unreadable logo writes nothing |
 | CLI | Default formats and output directory; `--format` subset; zero-padded PNG names; `--strict` writes nothing on warnings; render error writes nothing; temporary files cleaned; `output_written` lines; exit codes |
-| Decoupling | `import plannings_tool` does not load matplotlib or ReportLab |
+| Decoupling | `import plannings_tool` does not load matplotlib, ReportLab, or Jinja2 |
 | Regression | All phase 1-3 tests pass |
 
-Visually inspect the PDF and PNGs for both Kleppen examples, a three-trainer
-session, an overrunning day, and an undated day.
+The PNGs for both Kleppen examples, a three-trainer session, an overrunning day,
+and an undated day were visually inspected. PDF pages were verified by page
+count, extracted text, metadata, and overflow tests.
 
 ## Definition of done
 

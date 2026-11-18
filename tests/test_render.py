@@ -385,6 +385,24 @@ def test_pdf_has_one_page_per_day_content_and_metadata(definition):
     assert reader.metadata.creator == "Deltares"
 
 
+def test_pdf_type_column_fits_every_session_type(definition):
+    session_types = ("Presentation", "Exercise", "Excursion", "Interactive")
+    definition["days"][0]["schedule"] = [
+        {
+            "title": f"{session_type} session",
+            "type": session_type,
+            "duration": "remaining" if session_type == "Interactive" else "30m",
+            "trainers": ["alex"],
+        }
+        for session_type in session_types
+    ]
+    reader = PdfReader(BytesIO(render_pdf(_result(definition))))
+    lines = reader.pages[0].extract_text().splitlines()
+    for session_type in session_types:
+        type_cell = lines.index(f"{session_type} session") + 1
+        assert lines[type_cell : type_cell + 2] == [session_type, "Alex Example"]
+
+
 def test_pdf_includes_scheduling_warnings():
     result = schedule_course(
         load_course(ROOT / "testdata" / "Kleppen_auto_breaks.yaml")

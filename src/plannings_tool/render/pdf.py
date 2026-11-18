@@ -2,6 +2,7 @@
 
 from collections import Counter
 from io import BytesIO
+from math import ceil
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -37,6 +38,8 @@ from .gantt import render_gantt_pdf_chart
 
 FONT = "DejaVuSans"
 FONT_BOLD = "DejaVuSans-Bold"
+TABLE_FONT_SIZE = 9
+TABLE_CELL_PADDING = 4
 
 
 class _DayMarker(Flowable):
@@ -125,7 +128,7 @@ def _styles() -> dict[str, ParagraphStyle]:
         "table": ParagraphStyle(
             "Table",
             fontName=FONT,
-            fontSize=9,
+            fontSize=TABLE_FONT_SIZE,
             leading=11,
             textColor=colors.HexColor("#333333"),
         ),
@@ -201,6 +204,16 @@ def _header(
     return table
 
 
+def _type_column_width(result: ScheduleResult) -> float:
+    labels = {"Type"} | {
+        entry.session_type or "Break" for day in result.days for entry in day.entries
+    }
+    text_width = max(
+        pdfmetrics.stringWidth(label, FONT, TABLE_FONT_SIZE) for label in labels
+    )
+    return ceil(text_width) + 2 * TABLE_CELL_PADDING
+
+
 def _timetable(
     result: ScheduleResult,
     day: ScheduledDay,
@@ -219,29 +232,23 @@ def _timetable(
                 _paragraph(format_entry_title(entry), styles["table"]),
                 _paragraph(entry.session_type or "Break", styles["table"]),
                 _paragraph(
-                    ", ".join(names[trainer_id] for trainer_id in entry.trainer_ids),
+                    ", \n".join(names[trainer_id] for trainer_id in entry.trainer_ids),
                     styles["table"],
                 ),
             ]
         )
-    widths = [
-        49,
-        49,
-        52,
-        available_width * 0.31,
-        60,
-        available_width - (49 + 49 + 52 + available_width * 0.31 + 60),
-    ]
+    widths = [49, 49, 52, available_width * 0.31, _type_column_width(result)]
+    widths.append(available_width - sum(widths))
     table = Table(rows, colWidths=widths, repeatRows=1, hAlign="LEFT")
     style = [
         ("FONTNAME", (0, 0), (-1, -1), FONT),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTSIZE", (0, 0), (-1, -1), TABLE_FONT_SIZE),
         ("LEADING", (0, 0), (-1, -1), 11),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D1D5DB")),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E9EDF1")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), TABLE_CELL_PADDING),
+        ("RIGHTPADDING", (0, 0), (-1, -1), TABLE_CELL_PADDING),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]

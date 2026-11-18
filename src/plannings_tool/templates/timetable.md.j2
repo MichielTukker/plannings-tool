@@ -1,0 +1,37 @@
+{#- Default Markdown timetable. The README lists the available variables. -#}
+# {{ course.title }}
+
+{% if course.project_id %}Project {{ course.project_id }} · {% endif %}Timezone {{ course.timezone }}
+
+{% if course.description %}
+{{ course.description }}
+
+{% endif %}
+{% if warnings %}
+### Warnings
+
+{% for warning in warnings %}
+- {{ warning | md_cell }}
+{% endfor %}
+
+{% endif %}
+{% for day in days %}
+## {{ day.label }}
+
+{{ day.date or "floating local time" }}{% if day.location %} · {{ day.location }}{% endif %} · {{ day.start }}-{{ day.end }}
+
+| Start | End | Duration | Activity | Type | Trainers |
+|---|---|---|---|---|---|
+{% for entry in day.entries %}
+| {{ entry.start | md_cell }} | {{ entry.end | md_cell }} | {{ entry.duration | md_cell }} | {{ entry.title | md_cell }} | {{ (entry.type or "Break") | md_cell }} | {{ entry.trainers | join(", ") | md_cell }} |
+{% endfor %}
+
+{% if day.warnings %}
+### Warnings
+
+{% for warning in day.warnings %}
+- {{ warning | md_cell }}
+{% endfor %}
+
+{% endif %}
+{% endfor %}

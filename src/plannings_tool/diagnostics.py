@@ -30,19 +30,26 @@ class DiagnosticCode(StrEnum):
     FILE_READ = "file_read"
     INTERACTIVE_MINIMUM_OVERFLOW = "interactive_minimum_overflow"
     INVALID_DAY_INTERVAL = "invalid_day_interval"
+    LAYOUT_OVERFLOW = "layout_overflow"
+    LOGO_UNREADABLE = "logo_unreadable"
     MANUAL_BREAK_IN_AUTOMATIC = "manual_break_in_automatic"
     MISSING_MANUAL_BREAKS = "missing_manual_breaks"
     MULTIPLE_INTERACTIVE = "multiple_interactive"
     NONBLANK_SYNTAX = "nonblank_syntax"
     NONEXISTENT_LOCAL_TIME = "nonexistent_local_time"
     NULL_NOT_ALLOWED = "null_not_allowed"
+    OUTPUT_WRITE = "output_write"
+    OUTPUT_WRITTEN = "output_written"
     ROOT_MAPPING = "root_mapping"
+    RENDER_FAILURE = "render_failure"
     SCHEDULE_OVERFLOW = "schedule_overflow"
     SCHEDULE_ENTRY_TYPE = "schedule_entry_type"
     SCHEMA_VERSION = "schema_version"
     SCHEMA_WRITTEN = "schema_written"
     SCHEMA_WRITE = "schema_write"
     SESSION_SPLIT = "session_split"
+    TEMPLATE_ERROR = "template_error"
+    TEMPLATE_UNREADABLE = "template_unreadable"
     TIME_ORDER = "time_order"
     TIMEZONE_NAME = "timezone_name"
     TIMEZONE_TRANSITION = "timezone_transition"
@@ -128,3 +135,7 @@ class CourseValidationError(PlanningError):
 
 class SchedulingError(PlanningError):
     """A valid course could not be scheduled."""
+
+
+class RenderError(PlanningError):
+    """A resolved schedule could not be rendered."""

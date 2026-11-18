@@ -9,11 +9,15 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "email-validator>=2.4.0",
+    "matplotlib>=3.8",
     "pydantic>=2,<3",
+    "pillow>=10",
     "pyyaml>=6.0.3",
+    "reportlab>=4",
     "rich>=15.0.0",
     "typer>=0.29.1",
     "tzdata>=2026.6",
+    "jinja2>=3.1",
 ]
 
 [project.scripts]
@@ -26,6 +30,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+    "pypdf>=5",
     "ruff>=0.17.5",
     "ty>=0.0.104",
 ]

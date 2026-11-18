@@ -18,11 +18,12 @@ from .diagnostics import (
     Severity,
     display_location,
 )
+from .formatting import format_duration, format_entry_clock, format_entry_title
 from .loader import load_course
 from .models import CourseDefinition
+from .render import load_default_logo, load_logo, load_markdown_template
+from .render.output import RenderFormat, render_outputs, write_outputs_atomically
 from .scheduler import (
-    ScheduledDay,
-    ScheduledEntry,
     ScheduleResult,
     schedule_course,
 )
@@ -31,7 +32,7 @@ from .validation import check_missing_manual_breaks
 
 app = typer.Typer(
     name="plan",
-    help="Validate course definitions, preview schedules, and export their schema.",
+    help="Validate courses, preview and render schedules, and export the schema.",
     no_args_is_help=True,
     add_completion=False,
     rich_markup_mode="rich",
@@ -77,26 +78,6 @@ def _print_diagnostics(
         _print_diagnostic(console, path, diagnostic)
 
 
-def _format_duration(minutes: int) -> str:
-    hours, remainder = divmod(minutes, 60)
-    if hours and remainder:
-        return f"{hours}h {remainder}m"
-    if hours:
-        return f"{hours}h"
-    return f"{remainder}m"
-
-
-def _entry_clock(day: ScheduledDay, entry: ScheduledEntry, *, end: bool) -> str:
-    offset = entry.end_offset_minutes if end else entry.start_offset_minutes
-    local_time = entry.local_end if end else entry.local_start
-    instant = entry.end_at if end else entry.start_at
-    if instant is not None and day.date is not None and instant.date() != day.date:
-        return f"{instant:%Y-%m-%d %H:%M}"
-    if instant is None and offset >= 24 * 60:
-        return f"+{offset // (24 * 60)}d {local_time:%H:%M}"
-    return f"{local_time:%H:%M}"
-
-
 def _print_schedule(
     console: Console, result: ScheduleResult, course: CourseDefinition
 ) -> None:
@@ -127,15 +108,12 @@ def _print_schedule(
             names = ", ".join(
                 trainer_names[trainer_id] for trainer_id in entry.trainer_ids
             )
-            title = entry.title
-            if entry.part_label is not None:
-                title = f"{title} ({entry.part_label})"
             table.add_row(
-                Text(_entry_clock(day, entry, end=False)),
-                Text(_entry_clock(day, entry, end=True)),
-                Text(_format_duration(entry.duration_minutes)),
+                Text(format_entry_clock(day, entry, end=False)),
+                Text(format_entry_clock(day, entry, end=True)),
+                Text(format_duration(entry.duration_minutes)),
                 Text(entry.session_type or "Break"),
-                Text(title),
+                Text(format_entry_title(entry)),
                 Text(names or "-"),
             )
         console.print(table)
@@ -191,6 +169,84 @@ def schedule(
     if strict and result.warnings:
         raise typer.Exit(code=1)
     _print_schedule(console, result, definition)
+
+
+@app.command(help="Render a course schedule to PDF, PNG, and Markdown.")
+def render(
+    context: typer.Context,
+    course: Annotated[Path, typer.Argument(help="UTF-8 course YAML file")],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir", help="Output directory (default: current directory)"
+        ),
+    ] = None,
+    formats: Annotated[
+        list[RenderFormat] | None,
+        typer.Option("--format", help="Output format; repeat for multiple formats"),
+    ] = None,
+    logo: Annotated[
+        Path | None,
+        typer.Option("--logo", help="PNG or JPEG logo override"),
+    ] = None,
+    no_logo: Annotated[
+        bool,
+        typer.Option("--no-logo", help="Render without a logo"),
+    ] = False,
+    template: Annotated[
+        Path | None,
+        typer.Option("--template", help="Jinja2 template for Markdown output"),
+    ] = None,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Treat scheduling warnings as failures")
+    ] = False,
+) -> None:
+    """Render a resolved schedule and atomically write requested outputs."""
+    formats = formats if formats is not None else list(RenderFormat)
+    if logo is not None and no_logo:
+        raise typer.BadParameter("--logo and --no-logo are mutually exclusive")
+    if template is not None and RenderFormat.MARKDOWN not in formats:
+        raise typer.BadParameter("--template requires --format md")
+
+    console = _console(context)
+    error_console = _console(context, stderr=True)
+    try:
+        definition = load_course(course)
+        result = schedule_course(definition)
+    except PlanningError as exc:
+        _print_diagnostics(error_console, course, exc.diagnostics)
+        raise typer.Exit(code=1) from exc
+
+    _print_diagnostics(error_console, course, result.diagnostics)
+    if strict and result.warnings:
+        raise typer.Exit(code=1)
+
+    output_dir = output_dir or Path.cwd()
+    logo_bytes = None
+    markdown_template = None
+    try:
+        if not no_logo and any(
+            output_format in {RenderFormat.PDF, RenderFormat.PNG}
+            for output_format in formats
+        ):
+            logo_bytes = load_logo(logo) if logo is not None else load_default_logo()
+        if template is not None:
+            markdown_template = load_markdown_template(template)
+        outputs = render_outputs(
+            result,
+            course,
+            output_dir,
+            tuple(formats),
+            logo_bytes,
+            markdown_template=markdown_template,
+        )
+        written = write_outputs_atomically(outputs)
+    except PlanningError as exc:
+        _print_diagnostics(error_console, course, exc.diagnostics)
+        raise typer.Exit(code=1) from exc
+
+    for path, diagnostic in written:
+        _print_diagnostic(console, path, diagnostic)
 
 
 @app.command(help="Export the editor JSON Schema.")

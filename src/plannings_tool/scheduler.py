@@ -92,6 +92,7 @@ class ScheduledDay:
 
 @dataclass(frozen=True)
 class ScheduleResult:
+    course: CourseDefinition
     days: tuple[ScheduledDay, ...]
     diagnostics: tuple[Diagnostic, ...]
 
@@ -861,4 +862,4 @@ def schedule_course(course: CourseDefinition) -> ScheduleResult:
         diagnostics.extend(day_diagnostics)
     if errors:
         raise SchedulingError(errors)
-    return ScheduleResult(tuple(scheduled_days), tuple(diagnostics))
+    return ScheduleResult(course, tuple(scheduled_days), tuple(diagnostics))

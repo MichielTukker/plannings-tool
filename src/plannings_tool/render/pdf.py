@@ -58,7 +58,15 @@ class _TrackedDocTemplate(SimpleDocTemplate):
         subject: str,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            *args,
+            title=title,
+            subject=subject,
+            author="Deltares",
+            creator="Deltares",
+            invariant=1,
+            **kwargs,
+        )
         self.current_day_index = 0
         self.page_day_indices: list[int] = []
         self._pdf_title = title
@@ -70,14 +78,6 @@ class _TrackedDocTemplate(SimpleDocTemplate):
 
     def afterPage(self) -> None:
         self.page_day_indices.append(self.current_day_index)
-
-    def _makeCanvas(self, filename=None, canvasmaker=canvas.Canvas):
-        pdf_canvas = super()._makeCanvas(filename, canvasmaker)
-        pdf_canvas.setTitle(self._pdf_title)
-        pdf_canvas.setSubject(self._pdf_subject)
-        pdf_canvas.setAuthor("plannings-tool")
-        pdf_canvas.setCreator("plannings-tool")
-        return pdf_canvas
 
 
 def _register_fonts() -> None:

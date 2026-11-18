@@ -277,7 +277,7 @@ def _trainer_legend(
     table = Table(rows, colWidths=[14, available_width - 14], hAlign="LEFT")
     table_style = [
         ("SPAN", (0, 0), (1, 0)),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("LEFTPADDING", (1, 1), (1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 1),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 1),

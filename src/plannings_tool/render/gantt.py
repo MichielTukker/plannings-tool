@@ -156,8 +156,8 @@ def _draw_stripes(
             transform=axes.transData,
             zorder=4,
         )
-        stripe.set_clip_path(rectangle)
         axes.add_patch(stripe)
+        stripe.set_clip_path(rectangle)
 
 
 def _day_heading(day: ScheduledDay) -> str:
@@ -182,10 +182,19 @@ def _render_chart(
     logo: bytes | None,
 ) -> bytes:
     model = build_gantt_model(day)
+    legend_handles = []
+    if include_legend:
+        appearing = {trainer_id for bar in model.bars for trainer_id in bar.trainer_ids}
+        legend_handles = [
+            Patch(facecolor=trainer_colors[trainer.id], label=trainer.name)
+            for trainer in trainers
+            if trainer.id in appearing
+        ]
+    legend_rows = ceil(len(legend_handles) / 4)
     row_count = max(1, len(model.rows))
     chart_height = max(0.5, len(model.rows) * (0.34 if include_heading else 0.22))
-    top_space = 0.82 if include_heading else 0.0
-    bottom_space = 0.9 if include_legend else 0.45
+    top_space = 0.82 if include_heading else 0.1 if include_legend else 0.0
+    bottom_space = 0.65 + 0.25 * legend_rows if legend_handles else 0.45
     height_inches = max(2.1, chart_height + top_space + bottom_space)
     figure = Figure(
         figsize=(width_inches, height_inches),
@@ -199,6 +208,13 @@ def _render_chart(
             bottom_space / height_inches,
             0.77,
             chart_height / height_inches,
+        )
+    elif include_legend:
+        axes_rect = (
+            0.25,
+            bottom_space / height_inches,
+            0.72,
+            (height_inches - bottom_space - top_space) / height_inches,
         )
     else:
         axes_rect = (0.25, 0.24, 0.72, 0.72)
@@ -240,8 +256,9 @@ def _render_chart(
         if model.rows:
             axes.text(
                 (break_item.start + break_item.end) / 2,
-                len(model.rows) - 1,
+                0.5,
                 "Coffee" if break_item.kind == "coffee" else "Lunch",
+                transform=axes.get_xaxis_transform(),
                 rotation=90,
                 ha="center",
                 va="center",
@@ -306,23 +323,16 @@ def _render_chart(
             logo_axes.imshow(image)
             logo_axes.axis("off")
 
-    if include_legend:
-        appearing = {trainer_id for bar in model.bars for trainer_id in bar.trainer_ids}
-        handles = [
-            Patch(facecolor=trainer_colors[trainer.id], label=trainer.name)
-            for trainer in trainers
-            if trainer.id in appearing
-        ]
-        if handles:
-            figure.legend(
-                handles=handles,
-                labels=[handle.get_label() for handle in handles],
-                loc="lower center",
-                bbox_to_anchor=(0.5, 0.025),
-                ncol=min(4, len(handles)),
-                frameon=False,
-                fontsize=8,
-            )
+    if legend_handles:
+        figure.legend(
+            handles=legend_handles,
+            labels=[handle.get_label() for handle in legend_handles],
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.05 / height_inches),
+            ncol=min(4, len(legend_handles)),
+            frameon=False,
+            fontsize=8,
+        )
 
     buffer = BytesIO()
     canvas.print_png(buffer, metadata={"Software": None})
@@ -335,7 +345,7 @@ def render_gantt_png(
     day_index: int,
     logo: bytes | None,
 ) -> bytes:
-    """Render one day's transparent Gantt PNG at 1920 pixels wide."""
+    """Render one day's Gantt PNG at 1920 pixels wide."""
     if not 0 <= day_index < len(result.days):
         raise ValueError(f"Unknown day index: {day_index}")
     day = result.days[day_index]
@@ -349,7 +359,7 @@ def render_gantt_png(
             result.course.course.title,
             width_inches=9.6,
             dpi=200,
-            include_heading=True,
+            include_heading=False,
             include_legend=True,
             logo=logo,
         )

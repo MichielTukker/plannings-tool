@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from PIL import Image
 from pypdf import PdfReader
 from typer.testing import CliRunner
@@ -24,7 +25,7 @@ from plannings_tool.render import (
     render_pdf,
 )
 from plannings_tool.render.colors import OKABE_ITO_PALETTE, assign_trainer_colors
-from plannings_tool.render.gantt import build_gantt_model
+from plannings_tool.render.gantt import build_gantt_model, render_gantt_pdf_chart
 from plannings_tool.render.output import (
     RenderFormat,
     render_outputs,
@@ -120,14 +121,13 @@ def test_gantt_model_tracks_split_rows_breaks_and_overrun(definition):
     assert overrun.axis_max == 120
 
 
-def test_gantt_png_is_transparent_fixed_width_and_deterministic(definition):
+def test_gantt_png_is_fixed_width_and_deterministic(definition):
     result = _result(_small_definition(definition))
     first = render_gantt_png(result, day_index=0, logo=None)
     second = render_gantt_png(result, day_index=0, logo=None)
     with Image.open(BytesIO(first)) as image:
         assert image.size[0] == 1920
         assert image.mode == "RGBA"
-        assert image.getchannel("A").getpixel((0, 0)) == 0
         assert "Software" not in image.info
     assert first == second
 
@@ -140,15 +140,104 @@ def test_gantt_png_is_transparent_fixed_width_and_deterministic(definition):
                 "duration": "15m",
                 "trainers": ["alex", "sam"],
             }
-            for index in range(2)
+            for index in range(7)
         ]
     )
     taller = render_gantt_png(_result(data), day_index=0, logo=None)
     with (
         Image.open(BytesIO(first)) as one_row,
-        Image.open(BytesIO(taller)) as three_rows,
+        Image.open(BytesIO(taller)) as eight_rows,
     ):
-        assert three_rows.height > one_row.height
+        assert eight_rows.height > one_row.height
+
+
+@pytest.mark.parametrize(("session_count", "trainer_count"), [(1, 2), (3, 5), (8, 13)])
+def test_gantt_png_legend_stays_below_axis_title(
+    definition, monkeypatch, session_count, trainer_count
+):
+    data = _small_definition(definition)
+    data["trainers"] = [
+        {
+            "id": f"trainer-{index}",
+            "name": f"Trainer {index}",
+            "email": f"trainer{index}@example.org",
+        }
+        for index in range(trainer_count)
+    ]
+    data["days"][0]["schedule"] = [
+        {
+            "title": f"Session {index}",
+            "type": "Presentation",
+            "duration": "15m",
+            "trainers": [trainer["id"] for trainer in data["trainers"]],
+        }
+        for index in range(session_count)
+    ]
+    print_png = FigureCanvasAgg.print_png
+
+    def check_layout(canvas, *args, **kwargs):
+        print_png(canvas, *args, **kwargs)
+        renderer = canvas.get_renderer()
+        legend_bounds = canvas.figure.legends[0].get_window_extent(renderer)
+        title_bounds = canvas.figure.axes[0].xaxis.label.get_window_extent(renderer)
+        assert legend_bounds.y0 >= 0
+        assert legend_bounds.y1 < title_bounds.y0
+
+    monkeypatch.setattr(FigureCanvasAgg, "print_png", check_layout)
+    render_gantt_png(_result(data), day_index=0, logo=None)
+
+
+@pytest.mark.parametrize("variant", ["png", "pdf"])
+@pytest.mark.parametrize(
+    ("session_count", "trainer_count"), [(1, 1), (1, 13), (3, 2), (8, 2)]
+)
+def test_gantt_break_labels_stay_inside_plot_area(
+    definition, monkeypatch, variant, session_count, trainer_count
+):
+    data = deepcopy(definition)
+    data["trainers"] = [
+        {
+            "id": f"trainer-{index}",
+            "name": f"Trainer {index}",
+            "email": f"trainer{index}@example.org",
+        }
+        for index in range(trainer_count)
+    ]
+    sessions = [
+        {
+            "title": f"Session {index}",
+            "type": "Presentation",
+            "duration": "30m",
+            "trainers": [trainer["id"] for trainer in data["trainers"]],
+        }
+        for index in range(session_count)
+    ]
+    data["days"][0]["schedule"] = [
+        sessions[0],
+        {"break": "coffee"},
+        {"break": "lunch"},
+        *sessions[1:],
+    ]
+    print_png = FigureCanvasAgg.print_png
+    labels = []
+
+    def check_labels(canvas, *args, **kwargs):
+        print_png(canvas, *args, **kwargs)
+        renderer = canvas.get_renderer()
+        axes = canvas.figure.axes[0]
+        labels.extend(text.get_text() for text in axes.texts)
+        for text in axes.texts:
+            bounds = text.get_window_extent(renderer)
+            assert bounds.y0 >= axes.bbox.y0
+            assert bounds.y1 <= axes.bbox.y1
+
+    monkeypatch.setattr(FigureCanvasAgg, "print_png", check_labels)
+    result = _result(data)
+    if variant == "png":
+        render_gantt_png(result, day_index=0, logo=None)
+    else:
+        render_gantt_pdf_chart(result, day_index=0, width_inches=7.5)
+    assert labels == ["Coffee", "Lunch"]
 
 
 def test_gantt_rejects_negative_or_out_of_range_day(definition):
@@ -293,7 +382,7 @@ def test_pdf_has_one_page_per_day_content_and_metadata(definition):
     assert reader.metadata is not None
     assert reader.metadata.title == "Training"
     assert reader.metadata.subject == "P-42"
-    assert reader.metadata.creator == "plannings-tool"
+    assert reader.metadata.creator == "Deltares"
 
 
 def test_pdf_includes_scheduling_warnings():

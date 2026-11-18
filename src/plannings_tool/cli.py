@@ -1,30 +1,25 @@
 """Typer commands and Rich terminal output."""
 
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich import box
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
+from .console import _print_diagnostic, _print_diagnostics, print_schedule
 from .diagnostics import (
     Diagnostic,
     DiagnosticCode,
     PlanningError,
     Severity,
-    display_location,
 )
-from .formatting import format_duration, format_entry_clock, format_entry_title
 from .loader import load_course
-from .models import CourseDefinition
 from .render import load_default_logo, load_logo, load_markdown_template
-from .render.output import RenderFormat, render_outputs, write_outputs_atomically
+from .render.output import (
+    RenderFormat,
+    render_outputs,
+    write_outputs_atomically,
+)
 from .scheduler import (
-    ScheduleResult,
     schedule_course,
 )
 from .schema import write_schema
@@ -37,82 +32,6 @@ app = typer.Typer(
     add_completion=False,
     rich_markup_mode="rich",
 )
-
-# Rich Console,  modify properties as needed.  Note that the unit tests actually
-# check console behavior (colloring, stdout/stderr, etc.
-STDOUT = Console(color_system="auto", stderr=False)
-STDERR = Console(color_system="auto", stderr=True)
-
-SEVERITY_STYLES = {
-    Severity.ERROR: "bold red",
-    Severity.WARNING: "bold orange1",
-    Severity.INFO: "bold green",
-}
-
-
-def _print_diagnostic(path: Path, diagnostic: Diagnostic) -> None:
-    # TODO: carry YAML line numbers into model and scheduling diagnostics; until
-    # then, the day/entry location identifies where the problem is.
-    if diagnostic.line is not None:
-        source = str(diagnostic.line)
-    else:
-        source = display_location(diagnostic.location) or "~"
-    output = Text()
-    output.append(
-        f"[{diagnostic.severity.upper()}]",
-        style=SEVERITY_STYLES[diagnostic.severity],
-    )
-    output.append(" - ")
-    output.append(f"{path.name}:{source}", style="cyan")
-    output.append(f" - {diagnostic.message}")
-    if diagnostic.severity == Severity.INFO:
-        STDOUT.print(output, soft_wrap=True)
-    else:
-        STDERR.print(output, soft_wrap=True)
-
-
-def _print_diagnostics(path: Path, diagnostics: Iterable[Diagnostic]) -> None:
-    for diagnostic in diagnostics:
-        _print_diagnostic(path, diagnostic)
-
-
-def _print_schedule(result: ScheduleResult, course: CourseDefinition) -> None:
-    trainer_names = {trainer.id: trainer.name for trainer in course.trainers}
-    for day in result.days:
-        title = Text(day.label, style="bold cyan")
-        if day.date is not None:
-            title.append(f"  {day.date.isoformat()}", style="bold")
-        details = Text()
-        details.append(
-            f"{day.start_local:%H:%M}-{day.end_local:%H:%M}  {day.timezone}",
-            style="dim",
-        )
-        if day.location:
-            details.append(f"  |  {day.location}")
-        if day.date is None:
-            details.append("  |  floating local times", style="yellow")
-        STDOUT.print(Panel(details, title=title, border_style="cyan"))
-
-        table = Table(box=box.SIMPLE_HEAVY)
-        table.add_column("Start", style="cyan", no_wrap=True)
-        table.add_column("End", style="cyan", no_wrap=True)
-        table.add_column("Duration", justify="right", no_wrap=True)
-        table.add_column("Type", no_wrap=True)
-        table.add_column("Session / break")
-        table.add_column("Trainers")
-        for entry in day.entries:
-            names = ", ".join(
-                trainer_names[trainer_id] for trainer_id in entry.trainer_ids
-            )
-            table.add_row(
-                Text(format_entry_clock(day, entry, end=False)),
-                Text(format_entry_clock(day, entry, end=True)),
-                Text(format_duration(entry.duration_minutes)),
-                Text(entry.session_type or "Break"),
-                Text(format_entry_title(entry)),
-                Text(names or "-"),
-            )
-        STDOUT.print(table)
 
 
 @app.command(help="Validate a course YAML file.")
@@ -157,7 +76,7 @@ def schedule(
     _print_diagnostics(course, result.diagnostics)
     if strict and result.warnings:
         raise typer.Exit(code=1)
-    _print_schedule(result, definition)
+    print_schedule(result, definition)
 
 
 @app.command(help="Render a course schedule to PDF, PNG, and Markdown.")

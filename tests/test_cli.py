@@ -5,7 +5,7 @@ import yaml
 from rich.console import Console
 from typer.testing import CliRunner
 
-from plannings_tool import cli
+from plannings_tool import console
 from plannings_tool.cli import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,10 +106,12 @@ def test_validate_diagnostics_use_rich_severity_colors(
     tmp_path, definition, monkeypatch
 ):
     monkeypatch.setattr(
-        cli, "STDERR", Console(force_terminal=True, color_system="256", stderr=True)
+        console, "STDERR", Console(force_terminal=True, color_system="256", stderr=True)
     )
     monkeypatch.setattr(
-        cli, "STDOUT", Console(force_terminal=True, color_system="256", stderr=False)
+        console,
+        "STDOUT",
+        Console(force_terminal=True, color_system="256", stderr=False),
     )
     definition["course"].update(start="09:00", end="14:00")
     path = tmp_path / "course.yaml"
